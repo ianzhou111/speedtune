@@ -31,29 +31,52 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         var session = await GetActiveSession();
         if (session is null) return;
 
-        var banned = session.Players.FirstOrDefault(p => p.Name == name && p.SocketId != socketId);
-        if (banned?.BannedUntil > DateTime.UtcNow)
+        // Player with same name but different socket = browser refresh / reconnect
+        var sameNamePlayer = session.Players.FirstOrDefault(p => p.Name == name && p.SocketId != socketId);
+
+        if (sameNamePlayer?.BannedUntil > DateTime.UtcNow)
         {
-            var retryAfter = (int)(banned.BannedUntil.Value - DateTime.UtcNow).TotalMilliseconds;
+            var retryAfter = (int)(sameNamePlayer.BannedUntil.Value - DateTime.UtcNow).TotalMilliseconds;
             await hub.Clients.Client(socketId).SendAsync("Error", new { Message = "banned", RetryAfter = retryAfter });
             return;
         }
 
-        if (session.Players.Any(p => p.Color == color && p.SocketId != socketId))
+        // Color conflict — but allow if it's the reconnecting player keeping their own color
+        if (session.Players.Any(p => p.Color == color && p.SocketId != socketId) && sameNamePlayer?.Color != color)
         {
             await hub.Clients.Client(socketId).SendAsync("Error", new { Message = "Color already taken" });
             return;
         }
 
-        var existing = session.Players.FirstOrDefault(p => p.SocketId == socketId);
-        if (existing is not null) { existing.Name = name; existing.Color = color; }
-        else session.Players.Add(new Player { SocketId = socketId, Name = name, Color = color });
+        string? oldSocketId = null;
+        var existingBySocket = session.Players.FirstOrDefault(p => p.SocketId == socketId);
+        if (existingBySocket is not null)
+        {
+            existingBySocket.Name = name;
+            existingBySocket.Color = color;
+        }
+        else if (sameNamePlayer is not null)
+        {
+            // Reconnect — take over existing slot so score is preserved
+            oldSocketId = sameNamePlayer.SocketId;
+            sameNamePlayer.SocketId = socketId;
+            sameNamePlayer.Color = color;
+        }
+        else
+        {
+            session.Players.Add(new Player { SocketId = socketId, Name = name, Color = color });
+        }
 
         await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
 
+        // Tell everyone the old socket is gone before announcing the new one
+        if (oldSocketId is not null)
+            await hub.Clients.All.SendAsync("LobbyPlayerLeft", new { PlayerId = oldSocketId });
+
         var game = await GetGame(session.GameId);
         await hub.Clients.Client(socketId).SendAsync("SessionState", BuildPublicState(session, game));
-        await hub.Clients.All.SendAsync("LobbyPlayerJoined", new { Player = BuildPlayerDto(new Player { SocketId = socketId, Name = name, Color = color }) });
+        var rejoined = session.Players.First(p => p.SocketId == socketId);
+        await hub.Clients.All.SendAsync("LobbyPlayerJoined", new { Player = BuildPlayerDto(rejoined) });
     }
 
     // ── start game ─────────────────────────────────────────────────────────

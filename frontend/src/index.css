@@ -118,6 +118,10 @@ label {
 
 .star { color: var(--yellow); }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ── Dual-range slider ─────────────────────────────────────────────────── */
 .dual-range-wrap {
   position: relative;

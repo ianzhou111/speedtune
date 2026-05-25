@@ -8,7 +8,7 @@ import type {
 } from '../lib/types'
 import { PLAYER_COLORS } from '../lib/types'
 
-type Phase = 'join' | 'lobby' | 'active' | 'ended'
+type Phase = 'join' | 'reconnecting' | 'lobby' | 'active' | 'ended'
 
 interface RevealInfo {
   AnimeName: string
@@ -27,7 +27,9 @@ export default function PlayerPage() {
   const [color, setColor] = useState(() => localStorage.getItem('st_color') || 'blue')
 
   // Game state
-  const [phase, setPhase] = useState<Phase>('join')
+  const [phase, setPhase] = useState<Phase>(() =>
+    localStorage.getItem('st_name') ? 'reconnecting' : 'join'
+  )
   const [players, setPlayers] = useState<Player[]>([])
   const [cards, setCards] = useState<CardSummary[]>([])
   const [currentCard, setCurrentCard] = useState<CardSummary | null>(null)
@@ -162,12 +164,19 @@ export default function PlayerPage() {
       })
 
       conn.on('Error', ({ Message, RetryAfter }: ErrorPayload) => {
+        setPhase('join')   // fall back to join form on any error
         if (Message === 'banned') {
           setError(`You are temporarily banned. Try again in ${Math.ceil((RetryAfter ?? 30000) / 1000)}s.`)
         } else {
           setError(Message)
         }
       })
+      // Auto-rejoin if credentials are saved (browser refresh recovery)
+      const savedName = localStorage.getItem('st_name')
+      const savedColor = localStorage.getItem('st_color') ?? 'blue'
+      if (savedName) {
+        conn.invoke('PlayerJoin', savedName, savedColor).catch(() => setPhase('join'))
+      }
     })
 
     return () => {
@@ -207,6 +216,18 @@ export default function PlayerPage() {
   const timerColor = timerPct > 0.5 ? 'var(--green)' : timerPct > 0.25 ? 'var(--yellow)' : 'var(--red)'
 
   // ── Render ──────────────────────────────────────────────────────────────
+
+  if (phase === 'reconnecting') {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+        <div style={{ fontSize: '2rem', animation: 'spin 1s linear infinite' }}>⏳</div>
+        <p style={{ color: 'var(--text-muted)' }}>Reconnecting as <strong style={{ color: 'var(--text)' }}>{name}</strong>…</p>
+        <button className="btn-secondary" style={{ fontSize: '0.85rem', padding: '6px 14px' }} onClick={() => { localStorage.removeItem('st_name'); localStorage.removeItem('st_color'); setPhase('join') }}>
+          Join as someone else
+        </button>
+      </div>
+    )
+  }
 
   if (phase === 'join') {
     return (
