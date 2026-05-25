@@ -105,7 +105,11 @@ export default function DisplayPage() {
       conn.on('LobbyPlayerLeft', ({ PlayerId }: { PlayerId: string }) => {
         setPlayers(prev => prev.filter(p => p.SocketId !== PlayerId))
       })
-      conn.on('GameStarted', () => { setStatus('active'); _setRoundPhase('idle') })
+      conn.on('GameStarted', () => {
+        setStatus('active')
+        _setRoundPhase('idle')
+        conn.invoke('DisplayJoin').catch(() => {})
+      })
 
       conn.on('RoundSongStart', (p: RoundSongStartPayload) => {
         setCurrentCardId(p.CardId)
@@ -337,45 +341,38 @@ export default function DisplayPage() {
       {/* Center: main area — no scroll */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '16px 20px', gap: 12, overflow: 'hidden', minWidth: 0 }}>
 
-        {/* Video + controls — only rendered when visible so it takes no space otherwise */}
-        {videoVisible && (
-          <div style={{ width: '100%', maxWidth: 640, alignSelf: 'center', flexShrink: 0 }}>
-            <video
-              ref={videoRef}
-              style={{ width: '100%', borderRadius: '12px 12px 0 0', background: '#000', display: 'block' }}
-              playsInline
-              onTimeUpdate={e => setVidTime(e.currentTarget.currentTime)}
-              onLoadedMetadata={e => setVidDuration(e.currentTarget.duration)}
-              onPlay={() => setVidPlaying(true)}
-              onPause={() => setVidPlaying(false)}
-            />
-            <div style={{ background: '#111', borderRadius: '0 0 12px 12px', padding: '8px 14px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{fmtTime(vidTime)}</span>
-                <input type="range" min={0} max={vidDuration || 1} step={0.5} value={vidTime}
-                  onChange={e => { const t = parseFloat(e.target.value); if (videoRef.current) videoRef.current.currentTime = t; setVidTime(t) }}
-                  style={{ flex: 1, accentColor: 'var(--accent)', height: 4 }} />
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{fmtTime(vidDuration)}</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <button onClick={() => { const v = videoRef.current; if (!v) return; v.paused ? v.play() : v.pause() }}
-                  style={{ background: 'none', color: '#fff', fontSize: '1.1rem', padding: '2px 6px', border: '1px solid #333', borderRadius: 6, flexShrink: 0 }}>
-                  {vidPlaying ? '⏸' : '▶'}
-                </button>
-                <span style={{ fontSize: '0.75rem' }}>{volume === 0 ? '🔇' : volume < 0.4 ? '🔉' : '🔊'}</span>
-                <input type="range" min={0} max={1} step={0.01} value={volume}
-                  onChange={e => applyVolume(parseFloat(e.target.value))}
-                  style={{ width: 80, accentColor: 'var(--accent)' }} />
-              </div>
+        {/* Single video element — always in DOM so ref/src/state never reset.
+            Wrapper is display:none during guess (audio-only) and shown on reveal. */}
+        <div style={{ display: videoVisible ? 'flex' : 'none', flexDirection: 'column', width: '100%', maxWidth: 640, alignSelf: 'center', flexShrink: 0 }}>
+          <video
+            ref={videoRef}
+            style={{ width: '100%', borderRadius: '12px 12px 0 0', background: '#000', display: 'block' }}
+            playsInline
+            onTimeUpdate={e => setVidTime(e.currentTarget.currentTime)}
+            onLoadedMetadata={e => setVidDuration(e.currentTarget.duration)}
+            onPlay={() => setVidPlaying(true)}
+            onPause={() => setVidPlaying(false)}
+          />
+          <div style={{ background: '#111', borderRadius: '0 0 12px 12px', padding: '8px 14px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{fmtTime(vidTime)}</span>
+              <input type="range" min={0} max={vidDuration || 1} step={0.5} value={vidTime}
+                onChange={e => { const t = parseFloat(e.target.value); if (videoRef.current) videoRef.current.currentTime = t; setVidTime(t) }}
+                style={{ flex: 1, accentColor: 'var(--accent)', height: 4 }} />
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{fmtTime(vidDuration)}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button onClick={() => { const v = videoRef.current; if (!v) return; v.paused ? v.play() : v.pause() }}
+                style={{ background: 'none', color: '#fff', fontSize: '1.1rem', padding: '2px 6px', border: '1px solid #333', borderRadius: 6, flexShrink: 0 }}>
+                {vidPlaying ? '⏸' : '▶'}
+              </button>
+              <span style={{ fontSize: '0.75rem' }}>{volume === 0 ? '🔇' : volume < 0.4 ? '🔉' : '🔊'}</span>
+              <input type="range" min={0} max={1} step={0.01} value={volume}
+                onChange={e => applyVolume(parseFloat(e.target.value))}
+                style={{ width: 80, accentColor: 'var(--accent)' }} />
             </div>
           </div>
-        )}
-
-        {/* Keep video element in DOM (for audio) but hidden when not visible */}
-        {!videoVisible && <video ref={videoRef} style={{ display: 'none' }} playsInline
-          onTimeUpdate={e => setVidTime(e.currentTarget.currentTime)}
-          onLoadedMetadata={e => setVidDuration(e.currentTarget.duration)}
-          onPlay={() => setVidPlaying(true)} onPause={() => setVidPlaying(false)} />}
+        </div>
 
         {/* Timer bar */}
         {(roundPhase === 'guess' || roundPhase === 'buzzed') && timeLeft > 0 && (
@@ -454,38 +451,40 @@ export default function DisplayPage() {
           </div>
         )}
 
-        {/* Card grid — grouped by difficulty, fills remaining space */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
-          {[1, 2, 3, 4, 5].map(stars => {
-            const group = cards.filter(c => c.Stars === stars)
-            if (group.length === 0) return null
-            return (
-              <div key={stars} style={{ flexShrink: 0 }}>
-                <div style={{ fontSize: '0.65rem', color: '#eab308', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 5 }}>
-                  {'★'.repeat(stars)}
+        {/* Card grid — only shown in idle phase */}
+        {roundPhase === 'idle' && (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
+            {[1, 2, 3, 4, 5].map(stars => {
+              const group = cards.filter(c => c.Stars === stars)
+              if (group.length === 0) return null
+              return (
+                <div key={stars} style={{ flexShrink: 0 }}>
+                  <div style={{ fontSize: '0.65rem', color: '#eab308', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 5 }}>
+                    {'★'.repeat(stars)}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 8 }}>
+                    {group.map(c => {
+                      const complete = c.PlayedCount >= c.TotalSongs
+                      const active = c.Id === currentCardId
+                      return (
+                        <div key={c.Id} style={{
+                          background: active ? 'var(--accent)' : complete ? '#111' : 'var(--surface)',
+                          border: `2px solid ${active ? 'var(--accent-light)' : 'var(--border)'}`,
+                          borderRadius: 10, padding: '8px 6px', textAlign: 'center',
+                          opacity: complete ? 0.35 : 1, transition: 'all 0.2s',
+                        }}>
+                          <div style={{ fontWeight: 600, fontSize: '0.82rem', marginBottom: 3 }}>{c.Label}</div>
+                          <div style={{ color: '#eab308', fontSize: '0.65rem', marginBottom: 2 }}>{'★'.repeat(c.Stars)}</div>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>{c.PlayedCount}/{c.TotalSongs}</div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 8 }}>
-                  {group.map(c => {
-                    const complete = c.PlayedCount >= c.TotalSongs
-                    const active = c.Id === currentCardId
-                    return (
-                      <div key={c.Id} style={{
-                        background: active ? 'var(--accent)' : complete ? '#111' : 'var(--surface)',
-                        border: `2px solid ${active ? 'var(--accent-light)' : 'var(--border)'}`,
-                        borderRadius: 10, padding: '8px 6px', textAlign: 'center',
-                        opacity: complete ? 0.35 : 1, transition: 'all 0.2s',
-                      }}>
-                        <div style={{ fontWeight: 600, fontSize: '0.82rem', marginBottom: 3 }}>{c.Label}</div>
-                        <div style={{ color: '#eab308', fontSize: '0.65rem', marginBottom: 2 }}>{'★'.repeat(c.Stars)}</div>
-                        <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>{c.PlayedCount}/{c.TotalSongs}</div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )
