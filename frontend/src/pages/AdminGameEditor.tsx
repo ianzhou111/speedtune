@@ -444,7 +444,7 @@ export default function AdminGameEditor() {
             </div>
             <button
               style={{ background: 'none', color: 'var(--text-muted)', padding: '2px 4px', flexShrink: 0, fontSize: '1rem' }}
-              onClick={() => { audioRef.current?.pause(); setPreviewSong(null) }}
+              onClick={() => setPreviewSong(null)}
               title="Close"
             >✕</button>
           </div>
