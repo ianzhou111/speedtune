@@ -292,98 +292,75 @@ export default function DisplayPage() {
 
   // ── ACTIVE screen ─────────────────────────────────────────────────────────
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', background: 'var(--bg)' }}>
+    <div style={{ height: '100vh', display: 'flex', background: 'var(--bg)', overflow: 'hidden' }}>
       {/* Left: score board + volume */}
-      <div style={{ width: 220, flexShrink: 0, padding: '20px 12px', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ width: 200, flexShrink: 0, padding: '16px 12px', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden' }}>
         <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Scores</div>
         {sorted.map((p, i) => (
-          <div key={p.SocketId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, background: i === 0 ? PLAYER_COLORS[p.Color] + '22' : 'var(--surface)', borderLeft: `4px solid ${PLAYER_COLORS[p.Color]}` }}>
-            <span style={{ flex: 1, fontWeight: 600, fontSize: '0.95rem', color: PLAYER_COLORS[p.Color] }}>{p.Name}</span>
-            <span style={{ fontWeight: 700 }}>{p.Score}</span>
+          <div key={p.SocketId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 8, background: i === 0 ? PLAYER_COLORS[p.Color] + '22' : 'var(--surface)', borderLeft: `4px solid ${PLAYER_COLORS[p.Color]}` }}>
+            <span style={{ flex: 1, fontWeight: 600, fontSize: '0.9rem', color: PLAYER_COLORS[p.Color] }}>{p.Name}</span>
+            <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{p.Score}</span>
           </div>
         ))}
 
         {/* Volume control */}
-        <div style={{ marginTop: 'auto', paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+        <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
             <span style={{ fontSize: '1rem' }}>{volume === 0 ? '🔇' : volume < 0.4 ? '🔉' : '🔊'}</span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1 }}>Volume</span>
             <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{Math.round(volume * 100)}%</span>
           </div>
-          <input
-            type="range"
-            min={0} max={1} step={0.01}
-            value={volume}
+          <input type="range" min={0} max={1} step={0.01} value={volume}
             onChange={e => applyVolume(parseFloat(e.target.value))}
-            style={{ width: '100%', accentColor: 'var(--accent)' }}
-          />
+            style={{ width: '100%', accentColor: 'var(--accent)' }} />
         </div>
       </div>
 
-      {/* Center: main area */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 24, gap: 16 }}>
+      {/* Center: main area — no scroll */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '16px 20px', gap: 12, overflow: 'hidden', minWidth: 0 }}>
 
-        {/* Video + custom controls (hidden during guess, shown during reveal) */}
-        <div style={{ width: '100%', maxWidth: 720, visibility: videoVisible ? 'visible' : 'hidden' }}>
-          <video
-            ref={videoRef}
-            style={{ width: '100%', borderRadius: '12px 12px 0 0', background: '#000', display: 'block' }}
-            playsInline
-            onTimeUpdate={e => setVidTime(e.currentTarget.currentTime)}
-            onLoadedMetadata={e => setVidDuration(e.currentTarget.duration)}
-            onPlay={() => setVidPlaying(true)}
-            onPause={() => setVidPlaying(false)}
-          />
-          {/* Controls bar */}
-          <div style={{
-            background: '#111', borderRadius: '0 0 12px 12px',
-            padding: '8px 14px 10px', display: 'flex', flexDirection: 'column', gap: 6,
-          }}>
-            {/* Progress bar */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-                {fmtTime(vidTime)}
-              </span>
-              <input
-                type="range"
-                min={0}
-                max={vidDuration || 1}
-                step={0.5}
-                value={vidTime}
-                onChange={e => {
-                  const t = parseFloat(e.target.value)
-                  if (videoRef.current) videoRef.current.currentTime = t
-                  setVidTime(t)
-                }}
-                style={{ flex: 1, accentColor: 'var(--accent)', height: 4 }}
-              />
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-                {fmtTime(vidDuration)}
-              </span>
-            </div>
-            {/* Play/pause + volume */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button
-                onClick={() => { const v = videoRef.current; if (!v) return; v.paused ? v.play() : v.pause() }}
-                style={{ background: 'none', color: '#fff', fontSize: '1.1rem', padding: '2px 6px', border: '1px solid #333', borderRadius: 6, flexShrink: 0 }}
-              >
-                {vidPlaying ? '⏸' : '▶'}
-              </button>
-              <span style={{ fontSize: '0.75rem' }}>{volume === 0 ? '🔇' : volume < 0.4 ? '🔉' : '🔊'}</span>
-              <input
-                type="range"
-                min={0} max={1} step={0.01}
-                value={volume}
-                onChange={e => applyVolume(parseFloat(e.target.value))}
-                style={{ width: 80, accentColor: 'var(--accent)' }}
-              />
+        {/* Video + controls — only rendered when visible so it takes no space otherwise */}
+        {videoVisible && (
+          <div style={{ width: '100%', maxWidth: 640, alignSelf: 'center', flexShrink: 0 }}>
+            <video
+              ref={videoRef}
+              style={{ width: '100%', borderRadius: '12px 12px 0 0', background: '#000', display: 'block' }}
+              playsInline
+              onTimeUpdate={e => setVidTime(e.currentTarget.currentTime)}
+              onLoadedMetadata={e => setVidDuration(e.currentTarget.duration)}
+              onPlay={() => setVidPlaying(true)}
+              onPause={() => setVidPlaying(false)}
+            />
+            <div style={{ background: '#111', borderRadius: '0 0 12px 12px', padding: '8px 14px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{fmtTime(vidTime)}</span>
+                <input type="range" min={0} max={vidDuration || 1} step={0.5} value={vidTime}
+                  onChange={e => { const t = parseFloat(e.target.value); if (videoRef.current) videoRef.current.currentTime = t; setVidTime(t) }}
+                  style={{ flex: 1, accentColor: 'var(--accent)', height: 4 }} />
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{fmtTime(vidDuration)}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <button onClick={() => { const v = videoRef.current; if (!v) return; v.paused ? v.play() : v.pause() }}
+                  style={{ background: 'none', color: '#fff', fontSize: '1.1rem', padding: '2px 6px', border: '1px solid #333', borderRadius: 6, flexShrink: 0 }}>
+                  {vidPlaying ? '⏸' : '▶'}
+                </button>
+                <span style={{ fontSize: '0.75rem' }}>{volume === 0 ? '🔇' : volume < 0.4 ? '🔉' : '🔊'}</span>
+                <input type="range" min={0} max={1} step={0.01} value={volume}
+                  onChange={e => applyVolume(parseFloat(e.target.value))}
+                  style={{ width: 80, accentColor: 'var(--accent)' }} />
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Timer bar — shown during guess/buzzed */}
+        {/* Keep video element in DOM (for audio) but hidden when not visible */}
+        {!videoVisible && <video ref={videoRef} style={{ display: 'none' }} playsInline
+          onTimeUpdate={e => setVidTime(e.currentTarget.currentTime)}
+          onLoadedMetadata={e => setVidDuration(e.currentTarget.duration)}
+          onPlay={() => setVidPlaying(true)} onPause={() => setVidPlaying(false)} />}
+
+        {/* Timer bar */}
         {(roundPhase === 'guess' || roundPhase === 'buzzed') && timeLeft > 0 && (
-          <div style={{ width: '100%', maxWidth: 720 }}>
+          <div style={{ flexShrink: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1 }}>Time</span>
               <span style={{ fontWeight: 700, color: timerColor, fontSize: '1.1rem', fontVariantNumeric: 'tabular-nums' }}>{timeLeft}s</span>
@@ -396,17 +373,15 @@ export default function DisplayPage() {
 
         {/* Round overlay */}
         {roundPhase !== 'idle' && currentCard && (
-          <div style={{ textAlign: 'center' }}>
+          <div style={{ textAlign: 'center', flexShrink: 0 }}>
             <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: 4 }}>
               {currentCard.Label} — {currentCard.Stars}★ — Song {songIndex + 1} / {totalSongs}
             </div>
-
             {roundPhase === 'buzzed' && buzzedPlayer && (
-              <div style={{ fontSize: '2rem', fontWeight: 800, color: PLAYER_COLORS[buzzedPlayer.Color], marginTop: 8 }}>
+              <div style={{ fontSize: '2rem', fontWeight: 800, color: PLAYER_COLORS[buzzedPlayer.Color] }}>
                 🎤 {buzzedPlayer.Name}!
               </div>
             )}
-
             {roundPhase === 'reveal' && reveal && (
               <div>
                 <div style={{ fontSize: '2rem', fontWeight: 800 }}>{reveal.SongName}</div>
@@ -419,35 +394,34 @@ export default function DisplayPage() {
                 )}
               </div>
             )}
-
             {roundPhase === 'guess' && (
-              <div style={{ fontSize: '1.2rem', color: 'var(--text-muted)', marginTop: 4 }}>🎵 Listening…</div>
+              <div style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>🎵 Listening…</div>
             )}
           </div>
         )}
 
-        {/* Picker strip — shown in idle phase */}
+        {/* Picker strip — idle only */}
         {roundPhase === 'idle' && pickOrder.length > 0 && (
-          <div style={{ width: '100%', maxWidth: 720, background: 'var(--surface)', borderRadius: 10, padding: '10px 16px' }}>
-            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Picking order</div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 10, padding: '8px 14px', flexShrink: 0 }}>
+            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Picking order</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {pickOrder.map((id, i) => {
                 const p = players.find(x => x.SocketId === id)
                 if (!p) return null
                 const isCurrent = id === currentPickerId
                 return (
                   <div key={id} style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '5px 12px', borderRadius: 20,
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    padding: '4px 12px', borderRadius: 20,
                     background: isCurrent ? PLAYER_COLORS[p.Color] : PLAYER_COLORS[p.Color] + '22',
                     border: `2px solid ${PLAYER_COLORS[p.Color]}`,
                     color: isCurrent ? '#fff' : PLAYER_COLORS[p.Color],
                     fontWeight: isCurrent ? 700 : 400, fontSize: '0.85rem',
                     opacity: isCurrent ? 1 : 0.5,
                   }}>
-                    <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>{i + 1}.</span>
+                    <span style={{ fontSize: '0.65rem', opacity: 0.7 }}>{i + 1}.</span>
                     {p.Name}
-                    {isCurrent && <span style={{ fontSize: '0.7rem', background: 'rgba(255,255,255,0.3)', borderRadius: 3, padding: '0 4px' }}>🎯</span>}
+                    {isCurrent && <span>🎯</span>}
                   </div>
                 )
               })}
@@ -455,30 +429,30 @@ export default function DisplayPage() {
           </div>
         )}
 
-        {/* Card grid — grouped by difficulty */}
-        <div style={{ width: '100%', maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {/* Card grid — grouped by difficulty, fills remaining space */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
           {[1, 2, 3, 4, 5].map(stars => {
             const group = cards.filter(c => c.Stars === stars)
             if (group.length === 0) return null
             return (
-              <div key={stars}>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
+              <div key={stars} style={{ flexShrink: 0 }}>
+                <div style={{ fontSize: '0.65rem', color: '#eab308', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 5 }}>
                   {'★'.repeat(stars)}
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 8 }}>
                   {group.map(c => {
                     const complete = c.PlayedCount >= c.TotalSongs
                     const active = c.Id === currentCardId
                     return (
                       <div key={c.Id} style={{
-                        width: 120, flexShrink: 0,
                         background: active ? 'var(--accent)' : complete ? '#111' : 'var(--surface)',
                         border: `2px solid ${active ? 'var(--accent-light)' : 'var(--border)'}`,
-                        borderRadius: 10, padding: '12px 8px', textAlign: 'center',
+                        borderRadius: 10, padding: '8px 6px', textAlign: 'center',
                         opacity: complete ? 0.35 : 1, transition: 'all 0.2s',
                       }}>
-                        <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 4 }}>{c.Label}</div>
-                        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: 2 }}>{c.PlayedCount}/{c.TotalSongs}</div>
+                        <div style={{ fontWeight: 600, fontSize: '0.82rem', marginBottom: 3 }}>{c.Label}</div>
+                        <div style={{ color: '#eab308', fontSize: '0.65rem', marginBottom: 2 }}>{'★'.repeat(c.Stars)}</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>{c.PlayedCount}/{c.TotalSongs}</div>
                       </div>
                     )
                   })}
