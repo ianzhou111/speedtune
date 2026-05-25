@@ -125,6 +125,7 @@ export default function AdminGameEditor() {
     const newCard: Card = { Id: crypto.randomUUID(), Label: label, Stars: 1, Songs: [] }
     const updated = { ...game, Cards: [newCard, ...game.Cards] }
     setGame(updated)
+    setTargetCardId(newCard.Id)
   }
 
   function removeCard(cardId: string) {
