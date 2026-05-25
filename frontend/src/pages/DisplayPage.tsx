@@ -455,16 +455,34 @@ export default function DisplayPage() {
           </div>
         )}
 
-        {/* Card grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10, width: '100%', maxWidth: 720 }}>
-          {cards.map(c => {
-            const complete = c.PlayedCount >= c.TotalSongs
-            const active = c.Id === currentCardId
+        {/* Card grid — grouped by difficulty */}
+        <div style={{ width: '100%', maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {[1, 2, 3, 4, 5].map(stars => {
+            const group = cards.filter(c => c.Stars === stars)
+            if (group.length === 0) return null
             return (
-              <div key={c.Id} style={{ background: active ? 'var(--accent)' : complete ? '#111' : 'var(--surface)', border: `2px solid ${active ? 'var(--accent-light)' : 'var(--border)'}`, borderRadius: 10, padding: '12px 8px', textAlign: 'center', opacity: complete ? 0.35 : 1, transition: 'all 0.2s' }}>
-                <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 4 }}>{c.Label}</div>
-                <div style={{ color: 'var(--yellow)', fontSize: '0.85rem' }}>{'★'.repeat(c.Stars)}</div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: 2 }}>{c.PlayedCount}/{c.TotalSongs}</div>
+              <div key={stars}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
+                  {'★'.repeat(stars)}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                  {group.map(c => {
+                    const complete = c.PlayedCount >= c.TotalSongs
+                    const active = c.Id === currentCardId
+                    return (
+                      <div key={c.Id} style={{
+                        width: 120, flexShrink: 0,
+                        background: active ? 'var(--accent)' : complete ? '#111' : 'var(--surface)',
+                        border: `2px solid ${active ? 'var(--accent-light)' : 'var(--border)'}`,
+                        borderRadius: 10, padding: '12px 8px', textAlign: 'center',
+                        opacity: complete ? 0.35 : 1, transition: 'all 0.2s',
+                      }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 4 }}>{c.Label}</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: 2 }}>{c.PlayedCount}/{c.TotalSongs}</div>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )
           })}
