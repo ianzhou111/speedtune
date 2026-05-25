@@ -92,6 +92,7 @@ export default function HostPage() {
       conn.invoke('HostJoin').catch(() => {})
     })
     conn.on('ScoresUpdate', ({ Scores }: ScoresUpdatePayload) => setPlayers(Scores))
+    conn.on('CardsUpdate', ({ Cards }: { Cards: CardSummary[] }) => setCards(Cards ?? []))
     conn.on('GameEnded', (p: GameEndedPayload) => { setPlayers(p.FinalScores); setStatus('ended') })
 
     // Start and join host group

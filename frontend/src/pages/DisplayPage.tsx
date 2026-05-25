@@ -183,6 +183,7 @@ export default function DisplayPage() {
       })
 
       conn.on('ScoresUpdate', ({ Scores }: ScoresUpdatePayload) => setPlayers(Scores ?? []))
+      conn.on('CardsUpdate', ({ Cards }: { Cards: CardSummary[] }) => setCards(Cards ?? []))
 
       conn.on('GameEnded', ({ FinalScores }: GameEndedPayload) => {
         setFinalScores(FinalScores ?? [])
@@ -200,7 +201,7 @@ export default function DisplayPage() {
       clearTimer()
       const EVENTS = ['SessionState','LobbyPlayerJoined','LobbyPlayerLeft','GameStarted',
         'RoundSongStart','RoundBuzz','RoundAudioPause','RoundAudioPlay','RoundAudioResume','RoundAnswerReveal',
-        'RoundCardComplete','ScoresUpdate','GameEnded']
+        'RoundCardComplete','ScoresUpdate','CardsUpdate','GameEnded']
       EVENTS.forEach(e => connRef.current?.off(e))
     }
   }, [])

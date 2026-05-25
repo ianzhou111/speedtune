@@ -268,6 +268,7 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
             VideoUrl = song.VideoUrl
         });
         await hub.Clients.All.SendAsync("ScoresUpdate", BuildScores(session.Players));
+        await hub.Clients.All.SendAsync("CardsUpdate", new { Cards = BuildCardSummaries(session, game) });
         // Host clicks "Next Song" to advance — see NextSong() below.
     }
 
@@ -337,6 +338,19 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
 
     // ── helpers ────────────────────────────────────────────────────────────
 
+    private static IEnumerable<object> BuildCardSummaries(Session session, Game game)
+    {
+        var playedSet = session.PlayedSongs
+            .Select(p => $"{p.CardId}-{p.SongIndex}")
+            .ToHashSet();
+        return game.Cards.Select(c => (object)new
+        {
+            c.Id, c.Label, c.Stars,
+            TotalSongs = c.Songs.Count,
+            PlayedCount = Enumerable.Range(0, c.Songs.Count).Count(i => playedSet.Contains($"{c.Id}-{i}"))
+        });
+    }
+
     private static int CalcStartPercent(SongEntry song)
     {
         if (song.StartMin >= song.StartMax) return song.StartMin;
@@ -349,18 +363,7 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
     {
         if (session is null || game is null) return null;
 
-        var playedSet = session.PlayedSongs
-            .Select(p => $"{p.CardId}-{p.SongIndex}")
-            .ToHashSet();
-
-        var cards = game.Cards.Select(c => new
-        {
-            c.Id,
-            c.Label,
-            c.Stars,
-            TotalSongs = c.Songs.Count,
-            PlayedCount = Enumerable.Range(0, c.Songs.Count).Count(i => playedSet.Contains($"{c.Id}-{i}"))
-        });
+        var cards = BuildCardSummaries(session, game);
 
         object? currentRound = null;
         if (session.CurrentRound is { } r)
