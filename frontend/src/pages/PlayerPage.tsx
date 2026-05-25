@@ -428,32 +428,16 @@ export default function PlayerPage() {
         </div>
       )}
 
-      {/* Card grid */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
-        gap: 10,
-        width: '100%',
-        maxWidth: 600,
-        marginBottom: 24,
-      }}>
-        {cards.map(c => {
-          const complete = c.PlayedCount >= c.TotalSongs
-          const active = currentCard?.Id === c.Id
-          return (
-            <div key={c.Id} style={{
-              background: active ? 'var(--accent)' : complete ? 'var(--surface2)' : 'var(--surface)',
-              border: `2px solid ${active ? 'var(--accent-light)' : 'var(--border)'}`,
-              borderRadius: 10, padding: '10px 6px', textAlign: 'center',
-              opacity: complete ? 0.4 : 1,
-            }}>
-              <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: 2 }}>{c.Label}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--yellow)' }}>{'★'.repeat(c.Stars)}</div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{c.PlayedCount}/{c.TotalSongs}</div>
-            </div>
-          )
-        })}
-      </div>
+      {/* Current card only */}
+      {currentCard && (
+        <div style={{
+          background: 'var(--accent)', border: '2px solid var(--accent-light)',
+          borderRadius: 12, padding: '12px 24px', textAlign: 'center', marginBottom: 24,
+        }}>
+          <div style={{ fontWeight: 700, fontSize: '1rem' }}>{currentCard.Label}</div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--accent-light)' }}>{'★'.repeat(currentCard.Stars)}</div>
+        </div>
+      )}
 
       {/* Timer bar — shown during guess/buzzed */}
       {(roundPhase === 'guess' || roundPhase === 'buzzed') && timeLeft > 0 && (
