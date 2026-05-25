@@ -65,7 +65,7 @@ public class AnisongController(IHttpClientFactory httpFactory) : ControllerBase
                 AnimeName = !string.IsNullOrWhiteSpace(r.AnimeENName) ? r.AnimeENName : r.AnimeJPName,
                 r.AnimeVintage,
                 r.SongType,
-                r.SongLength,
+                SongLength = r.SongLength ?? 0f,
                 VideoUrl = ToUrl(r.HQ) ?? ToUrl(r.MQ) ?? ToUrl(r.Audio) ?? ""
             })
             .ToList();
@@ -93,7 +93,7 @@ public class AnisongResult
     [JsonPropertyName("animeJPName")] public string AnimeJPName { get; set; } = "";
     [JsonPropertyName("animeVintage")] public string AnimeVintage { get; set; } = "";
     [JsonPropertyName("songType")]    public string SongType { get; set; } = "";
-    [JsonPropertyName("songLength")]  public float SongLength { get; set; } = 0;
+    [JsonPropertyName("songLength")]  public float? SongLength { get; set; }
     [JsonPropertyName("HQ")]          public string? HQ { get; set; }
     [JsonPropertyName("MQ")]          public string? MQ { get; set; }
     [JsonPropertyName("audio")]       public string? Audio { get; set; }
