@@ -73,6 +73,9 @@ export default function AdminGameEditor() {
   const [searchError, setSearchError] = useState('')
   const [targetCardId, setTargetCardId] = useState<string | null>(null)
 
+  // Preview player state
+  const [previewSong, setPreviewSong] = useState<SongEntry | null>(null)
+
   useEffect(() => {
     if (!isAuthenticated()) { navigate('/login'); return }
     if (!id) return
@@ -306,6 +309,16 @@ export default function AdminGameEditor() {
                     opacity: alreadyAdded ? 0.5 : 1,
                   }}
                 >
+                  <button
+                    style={{
+                      background: previewSong?.VideoUrl === song.VideoUrl ? 'var(--accent)' : 'var(--surface)',
+                      color: previewSong?.VideoUrl === song.VideoUrl ? '#fff' : 'var(--text-muted)',
+                      border: '1px solid var(--border)', borderRadius: 6,
+                      padding: '4px 8px', flexShrink: 0, fontSize: '0.9rem',
+                    }}
+                    onClick={() => setPreviewSong(song)}
+                    title="Preview"
+                  >▶</button>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {song.SongName} — {song.SongArtist}
@@ -370,6 +383,16 @@ export default function AdminGameEditor() {
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <button
+                      style={{
+                        background: previewSong?.VideoUrl === song.VideoUrl ? 'var(--accent)' : 'var(--surface)',
+                        color: previewSong?.VideoUrl === song.VideoUrl ? '#fff' : 'var(--text-muted)',
+                        border: '1px solid var(--border)', borderRadius: 6,
+                        padding: '2px 7px', flexShrink: 0, fontSize: '0.85rem',
+                      }}
+                      onClick={() => setPreviewSong(song)}
+                      title="Preview"
+                    >▶</button>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 500 }}>{song.SongName} — {song.SongArtist}</div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{song.AnimeName} · {song.SongType}</div>
@@ -395,6 +418,44 @@ export default function AdminGameEditor() {
         <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>
           No cards yet. Click "Add Card" to start.
         </p>
+      )}
+
+      {/* Mini preview player — fixed bottom-right */}
+      {previewSong && (
+        <div style={{
+          position: 'fixed', bottom: 24, right: 24, zIndex: 100,
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 14, padding: '14px 16px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+          width: 300, display: 'flex', flexDirection: 'column', gap: 10,
+        }}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--accent-light)', marginBottom: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {previewSong.AnimeName}
+              </div>
+              <div style={{ fontWeight: 500, fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {previewSong.SongName}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {previewSong.SongArtist} · {previewSong.SongType}
+              </div>
+            </div>
+            <button
+              style={{ background: 'none', color: 'var(--text-muted)', padding: '2px 4px', flexShrink: 0, fontSize: '1rem' }}
+              onClick={() => { audioRef.current?.pause(); setPreviewSong(null) }}
+              title="Close"
+            >✕</button>
+          </div>
+          {/* Native audio controls for seek/volume */}
+          <audio
+            src={previewSong.VideoUrl}
+            controls
+            autoPlay
+            style={{ width: '100%', height: 32, accentColor: 'var(--accent)' }}
+          />
+        </div>
       )}
     </div>
   )
