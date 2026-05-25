@@ -28,7 +28,9 @@ export default function DisplayPage() {
   const [clipDuration, setClipDuration] = useState(60)
   const [startPercent, setStartPercent] = useState(0)
   const [timeLeft, setTimeLeft] = useState(0)
-  const [roundPhase, setRoundPhase] = useState<'idle' | 'guess' | 'buzzed' | 'reveal'>('idle')
+  const [roundPhase, setRoundPhase] = useState<'idle' | 'guess' | 'buzzed' | 'reveal'>('idle');
+  // keep ref in sync so startTimer closure can read current phase
+  const _setRoundPhase = (p: 'idle' | 'guess' | 'buzzed' | 'reveal') => { roundPhaseRef.current = p; setRoundPhase(p) }
   const [buzzedPlayer, setBuzzedPlayer] = useState<{ SocketId: string; Name: string; Color: string } | null>(null)
   const [reveal, setReveal] = useState<RevealInfo | null>(null)
   const [videoVisible, setVideoVisible] = useState(false)
@@ -39,6 +41,8 @@ export default function DisplayPage() {
   const [vidPlaying, setVidPlaying] = useState(false)
   const [currentPickerId, setCurrentPickerId] = useState<string | null>(null)
   const [pickOrder, setPickOrder] = useState<string[]>([])
+  const [timedOut, setTimedOut] = useState(false)
+  const roundPhaseRef = useRef<'idle' | 'guess' | 'buzzed' | 'reveal'>('idle')
 
   function applyVolume(v: number) {
     setVolume(v)
@@ -52,10 +56,18 @@ export default function DisplayPage() {
 
   function startTimer(duration: number) {
     clearTimer()
+    setTimedOut(false)
     setTimeLeft(duration)
     timerRef.current = setInterval(() => {
       setTimeLeft(t => {
-        if (t <= 1) { clearTimer(); return 0 }
+        if (t <= 1) {
+          clearTimer()
+          if (roundPhaseRef.current === 'guess') {
+            setTimedOut(true)
+            videoRef.current?.pause()
+          }
+          return 0
+        }
         return t - 1
       })
     }, 1000)
@@ -82,7 +94,7 @@ export default function DisplayPage() {
           setCurrentCardId(cr.CardId)
           setSongIndex(cr.SongIndex)
           setTotalSongs(cr.TotalSongs)
-          setRoundPhase(cr.Phase as 'idle' | 'guess' | 'buzzed' | 'reveal')
+          _setRoundPhase(cr.Phase as 'idle' | 'guess' | 'buzzed' | 'reveal')
           setBuzzedPlayer(cr.BuzzedPlayer)
         }
       })
@@ -93,7 +105,7 @@ export default function DisplayPage() {
       conn.on('LobbyPlayerLeft', ({ PlayerId }: { PlayerId: string }) => {
         setPlayers(prev => prev.filter(p => p.SocketId !== PlayerId))
       })
-      conn.on('GameStarted', () => { setStatus('active'); setRoundPhase('idle') })
+      conn.on('GameStarted', () => { setStatus('active'); _setRoundPhase('idle') })
 
       conn.on('RoundSongStart', (p: RoundSongStartPayload) => {
         setCurrentCardId(p.CardId)
@@ -102,10 +114,11 @@ export default function DisplayPage() {
         setClipDuration(p.ClipDuration)
         setStartPercent(p.StartPercent ?? 0)
         startPercentRef.current = p.StartPercent ?? 0
-        setRoundPhase('guess')
+        _setRoundPhase('guess')
         setBuzzedPlayer(null)
         setReveal(null)
         setVideoVisible(false)
+        setTimedOut(false)
         startTimer(p.ClipDuration)
 
         const vid = videoRef.current
@@ -128,7 +141,8 @@ export default function DisplayPage() {
 
       conn.on('RoundBuzz', ({ Player: pl }: { Player: { SocketId: string; Name: string; Color: string } }) => {
         setBuzzedPlayer(pl)
-        setRoundPhase('buzzed')
+        _setRoundPhase('buzzed')
+        setTimedOut(false)
         clearTimer()
       })
 
@@ -137,7 +151,7 @@ export default function DisplayPage() {
 
       conn.on('RoundAudioResume', () => {
         setBuzzedPlayer(null)
-        setRoundPhase('guess')
+        _setRoundPhase('guess')
         const vid = videoRef.current
         if (vid) {
           vid.muted = true
@@ -148,7 +162,8 @@ export default function DisplayPage() {
 
       conn.on('RoundAnswerReveal', (p: RoundAnswerRevealPayload) => {
         setReveal(p)
-        setRoundPhase('reveal')
+        _setRoundPhase('reveal')
+        setTimedOut(false)
         setVideoVisible(true)
         clearTimer()
 
@@ -180,7 +195,8 @@ export default function DisplayPage() {
 
       conn.on('RoundCardComplete', () => {
         setCurrentCardId(null)
-        setRoundPhase('idle')
+        _setRoundPhase('idle')
+        setTimedOut(false)
         setReveal(null)
         setBuzzedPlayer(null)
         setVideoVisible(false)
@@ -394,8 +410,14 @@ export default function DisplayPage() {
                 )}
               </div>
             )}
-            {roundPhase === 'guess' && (
+            {roundPhase === 'guess' && !timedOut && (
               <div style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>🎵 Listening…</div>
+            )}
+            {timedOut && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--yellow)' }}>⏰ Time's up!</div>
+                <div style={{ fontSize: '1rem', color: 'var(--text-muted)', marginTop: 4 }}>No one buzzed — audience, do you know it?</div>
+              </div>
             )}
           </div>
         )}

@@ -42,11 +42,36 @@ export default function HostPage() {
   const [editingScore, setEditingScore] = useState<{ playerId: string; value: string } | null>(null)
   const [currentPickerId, setCurrentPickerId] = useState<string | null>(null)
   const [pickOrder, setPickOrder] = useState<string[]>([])
+  const [timedOut, setTimedOut] = useState(false)
+  const [timeLeft, setTimeLeft] = useState(0)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const roundPhaseRef = useRef<'idle' | 'guess' | 'buzzed' | 'reveal'>('idle')
 
   function commitScore(playerId: string, raw: string) {
     const n = parseInt(raw, 10)
     if (!isNaN(n)) invoke('HostSetScore', playerId, n)
     setEditingScore(null)
+  }
+
+  function clearTimer() {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+    setTimeLeft(0)
+  }
+
+  function startTimer(duration: number) {
+    clearTimer()
+    setTimedOut(false)
+    setTimeLeft(duration)
+    timerRef.current = setInterval(() => {
+      setTimeLeft(t => {
+        if (t <= 1) {
+          clearTimer()
+          if (roundPhaseRef.current === 'guess') setTimedOut(true)
+          return 0
+        }
+        return t - 1
+      })
+    }, 1000)
   }
 
   useEffect(() => {
@@ -90,16 +115,23 @@ export default function HostPage() {
       setPlayers(prev => [...prev.filter(x => x.SocketId !== p.SocketId), p]))
     conn.on('LobbyPlayerLeft', ({ PlayerId }: { PlayerId: string }) =>
       setPlayers(prev => prev.filter(p => p.SocketId !== PlayerId)))
-    conn.on('GameStarted', () => { setStatus('active'); setRoundPhase('idle') })
+    conn.on('GameStarted', () => { setStatus('active'); setRoundPhase('idle'); roundPhaseRef.current = 'idle' })
     conn.on('RoundSongStart', (p: RoundSongStartPayload) => {
       setCurrentCardId(p.CardId); setSongIndex(p.SongIndex); setTotalSongs(p.TotalSongs)
-      setRoundPhase('guess'); setBuzzedPlayer(null); setReveal(null); setAudioPaused(false)
+      roundPhaseRef.current = 'guess'; setRoundPhase('guess')
+      setBuzzedPlayer(null); setReveal(null); setAudioPaused(false); setTimedOut(false)
+      startTimer(p.ClipDuration)
     })
     conn.on('RoundAnswerHint', (hint: RoundAnswerHintPayload) => setAnswerHint(hint))
-    conn.on('RoundBuzz', ({ Player: p }: { Player: Player }) => { setBuzzedPlayer(p); setRoundPhase('buzzed') })
-    conn.on('RoundAnswerReveal', (p: RoundAnswerRevealPayload) => { setReveal(p); setRoundPhase('reveal'); setAnswerHint(null) })
+    conn.on('RoundBuzz', ({ Player: p }: { Player: Player }) => {
+      setBuzzedPlayer(p); roundPhaseRef.current = 'buzzed'; setRoundPhase('buzzed'); setTimedOut(false); clearTimer()
+    })
+    conn.on('RoundAnswerReveal', (p: RoundAnswerRevealPayload) => {
+      setReveal(p); roundPhaseRef.current = 'reveal'; setRoundPhase('reveal'); setAnswerHint(null); setTimedOut(false); clearTimer()
+    })
     conn.on('RoundCardComplete', () => {
-      setCurrentCardId(null); setRoundPhase('idle'); setAnswerHint(null); setReveal(null); setBuzzedPlayer(null)
+      setCurrentCardId(null); roundPhaseRef.current = 'idle'; setRoundPhase('idle')
+      setAnswerHint(null); setReveal(null); setBuzzedPlayer(null); setTimedOut(false); clearTimer()
       conn.invoke('HostJoin').catch(() => {})
     })
     conn.on('ScoresUpdate', ({ Scores }: ScoresUpdatePayload) => setPlayers(Scores))
@@ -401,13 +433,26 @@ export default function HostPage() {
                       {audioPaused ? '▶ Resume' : '⏸ Pause'}
                     </button>
                   )}
-                  {roundPhase === 'guess' && (
+                  {roundPhase === 'guess' && !timedOut && (
                     <button className="btn-secondary" style={{ padding: '6px 14px' }} onClick={() => invoke('HostSkip')}>
                       Skip
                     </button>
                   )}
+                  {timedOut && (
+                    <button className="btn-secondary" style={{ padding: '6px 14px' }} onClick={() => invoke('HostSkip')}>
+                      Reveal →
+                    </button>
+                  )}
                 </div>
               </div>
+
+              {/* Timed out state */}
+              {timedOut && roundPhase === 'guess' && (
+                <div style={{ marginTop: 12, padding: '10px 14px', background: 'var(--surface2)', borderRadius: 8, borderLeft: '4px solid var(--yellow)' }}>
+                  <span style={{ color: 'var(--yellow)', fontWeight: 700 }}>⏰ Time's up</span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginLeft: 8 }}>No one buzzed — click Reveal when ready</span>
+                </div>
+              )}
 
               {/* Buzzed state */}
               {roundPhase === 'buzzed' && buzzedPlayer && (
