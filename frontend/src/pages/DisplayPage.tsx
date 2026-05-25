@@ -438,7 +438,7 @@ export default function DisplayPage() {
               <div>
                 <div style={{ fontSize: '2rem', fontWeight: 800 }}>{reveal.SongName}</div>
                 <div style={{ fontSize: '1.1rem', color: 'var(--text-muted)' }}>{reveal.SongArtist}</div>
-                <div style={{ fontSize: '2rem', fontWeight: 800 }}>{reveal.AnimeName}</div>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--accent-light)' }}>{reveal.AnimeName}</div>
                 {reveal.PointsAwarded > 0 && reveal.WinnerId && (
                   <div style={{ color: 'var(--green)', fontWeight: 700, marginTop: 8, fontSize: '1.1rem' }}>
                     +{reveal.PointsAwarded}{reveal.WinnerId === currentPickerId ? ' 🌟×2' : ''} → {players.find(p => p.SocketId === reveal.WinnerId)?.Name}
