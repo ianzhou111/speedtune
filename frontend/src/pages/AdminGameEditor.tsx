@@ -207,6 +207,7 @@ export default function AdminGameEditor() {
         return anime !== 0 ? anime : a.SongName.localeCompare(b.SongName)
       })
       setSearchResults(sorted)
+      if (!targetCardId && game.Cards.length > 0) setTargetCardId(game.Cards[0].Id)
     } catch (err) {
       setSearchError(err instanceof Error ? err.message : 'Search failed')
     } finally {
