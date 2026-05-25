@@ -202,7 +202,10 @@ export default function AdminGameEditor() {
         ending: filterEnding,
         insert: filterInsert,
       })
+      const typeOrder = (t: string) => t.startsWith('Opening') ? 0 : t.startsWith('Ending') ? 1 : 2
       const sorted = [...results].sort((a, b) => {
+        const type = typeOrder(a.SongType) - typeOrder(b.SongType)
+        if (type !== 0) return type
         const anime = a.AnimeName.localeCompare(b.AnimeName)
         return anime !== 0 ? anime : a.SongName.localeCompare(b.SongName)
       })
