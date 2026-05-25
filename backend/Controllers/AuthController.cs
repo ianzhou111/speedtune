@@ -10,13 +10,14 @@ namespace SpeedTune.Api.Controllers;
 [Route("api/auth")]
 public class AuthController(IConfiguration config) : ControllerBase
 {
-    private const string HardcodedUsername = "admin";
-    private const string HardcodedPassword = "12345";
-
     [HttpPost("login")]
     public IActionResult Login([FromBody] LoginRequest req)
     {
-        if (req.Username != HardcodedUsername || req.Password != HardcodedPassword)
+        var username = config["Admin:Username"] ?? "admin";
+        var password = config["Admin:Password"]
+            ?? throw new Exception("Admin:Password is not configured. Set env var Admin__Password.");
+
+        if (req.Username != username || req.Password != password)
             return Unauthorized(new { message = "Invalid credentials" });
 
         var token = GenerateJwt();
@@ -41,7 +42,7 @@ public class AuthController(IConfiguration config) : ControllerBase
         var token = new JwtSecurityToken(
             issuer: issuer,
             audience: audience,
-            claims: [new Claim(ClaimTypes.Name, HardcodedUsername), new Claim(ClaimTypes.Role, "admin")],
+            claims: [new Claim(ClaimTypes.Name, config["Admin:Username"] ?? "admin"), new Claim(ClaimTypes.Role, "admin")],
             expires: DateTime.UtcNow.AddDays(7),
             signingCredentials: creds);
 
