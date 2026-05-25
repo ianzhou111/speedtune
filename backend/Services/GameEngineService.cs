@@ -220,6 +220,21 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         await hub.Clients.All.SendAsync("LobbyPlayerLeft", new { PlayerId = playerId });
     }
 
+    // ── set score (host manual override) ──────────────────────────────────
+
+    public async Task SetScore(string playerId, int score)
+    {
+        var session = await GetActiveSession();
+        if (session is null) return;
+
+        var player = session.Players.FirstOrDefault(p => p.SocketId == playerId);
+        if (player is null) return;
+
+        player.Score = score;
+        await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
+        await hub.Clients.All.SendAsync("ScoresUpdate", BuildScores(session.Players));
+    }
+
     // ── end game ───────────────────────────────────────────────────────────
 
     public async Task EndGame()

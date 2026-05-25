@@ -39,6 +39,13 @@ export default function HostPage() {
   const [answerHint, setAnswerHint] = useState<AnswerHint | null>(null)
   const [reveal, setReveal] = useState<RoundAnswerRevealPayload | null>(null)
   const [audioPaused, setAudioPaused] = useState(false)
+  const [editingScore, setEditingScore] = useState<{ playerId: string; value: string } | null>(null)
+
+  function commitScore(playerId: string, raw: string) {
+    const n = parseInt(raw, 10)
+    if (!isNaN(n)) invoke('HostSetScore', playerId, n)
+    setEditingScore(null)
+  }
 
   useEffect(() => {
     gamesApi.list()
@@ -258,7 +265,26 @@ export default function HostPage() {
             >
               <div style={{ width: 10, height: 10, borderRadius: '50%', background: PLAYER_COLORS[p.Color], flexShrink: 0 }} />
               <span style={{ flex: 1, fontSize: '0.9rem', fontWeight: 500 }}>{p.Name}</span>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{p.Score}</span>
+              {editingScore?.playerId === p.SocketId ? (
+                <input
+                  type="number"
+                  value={editingScore.value}
+                  onChange={e => setEditingScore({ playerId: p.SocketId, value: e.target.value })}
+                  onBlur={() => commitScore(p.SocketId, editingScore.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') commitScore(p.SocketId, editingScore.value)
+                    if (e.key === 'Escape') setEditingScore(null)
+                  }}
+                  autoFocus
+                  style={{ width: 64, padding: '2px 6px', fontSize: '0.85rem', textAlign: 'right' }}
+                />
+              ) : (
+                <span
+                  onClick={() => setEditingScore({ playerId: p.SocketId, value: String(p.Score) })}
+                  title="Click to edit score"
+                  style={{ fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer', borderBottom: '1px dashed var(--border)', paddingBottom: 1 }}
+                >{p.Score}</span>
+              )}
               {status === 'lobby' && (
                 <button
                   style={{ background: 'none', color: 'var(--red)', padding: '2px 4px', fontSize: '0.8rem' }}
