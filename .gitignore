@@ -33,6 +33,15 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# ASP.NET Core secrets / local overrides
+backend/appsettings.Development.json
+backend/appsettings.*.json
+!backend/appsettings.json
+
+# .NET build output
+backend/bin/
+backend/obj/
+
 # vercel
 .vercel
 
