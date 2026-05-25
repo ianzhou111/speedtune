@@ -44,6 +44,7 @@ export default function HostPage() {
   const [pickOrder, setPickOrder] = useState<string[]>([])
   const [timedOut, setTimedOut] = useState(false)
   const [timeLeft, setTimeLeft] = useState(0)
+  const [exhaustedBuzzers, setExhaustedBuzzers] = useState<string[]>([])
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const roundPhaseRef = useRef<'idle' | 'guess' | 'buzzed' | 'reveal'>('idle')
 
@@ -121,6 +122,7 @@ export default function HostPage() {
           setTotalSongs(cr.TotalSongs)
           setRoundPhase(cr.Phase as 'idle' | 'guess' | 'buzzed' | 'reveal')
           setBuzzedPlayer(cr.BuzzedPlayer ? state.Players.find(p => p.SocketId === cr.BuzzedPlayer!.SocketId) ?? null : null)
+          setExhaustedBuzzers(cr.ExhaustedBuzzers ?? [])
         }
       } else if (state.Status === 'lobby') {
         setStatus('lobby')
@@ -138,6 +140,7 @@ export default function HostPage() {
       setCurrentCardId(p.CardId); setSongIndex(p.SongIndex); setTotalSongs(p.TotalSongs)
       roundPhaseRef.current = 'guess'; setRoundPhase('guess')
       setBuzzedPlayer(null); setReveal(null); setAudioPaused(false); setTimedOut(false)
+      setExhaustedBuzzers([])
       startTimer(p.ClipDuration)
     })
     conn.on('RoundAnswerHint', (hint: RoundAnswerHintPayload) => setAnswerHint(hint))
@@ -145,14 +148,22 @@ export default function HostPage() {
       setBuzzedPlayer(p); roundPhaseRef.current = 'buzzed'; setRoundPhase('buzzed'); setTimedOut(false); pauseTimer()
     })
     conn.on('RoundAudioResume', () => {
-      roundPhaseRef.current = 'guess'; setRoundPhase('guess'); setBuzzedPlayer(null); resumeTimer()
+      // Wrong answer — add that player to exhausted list, resume timer and playback
+      roundPhaseRef.current = 'guess'; setRoundPhase('guess')
+      setBuzzedPlayer(prev => {
+        if (prev) setExhaustedBuzzers(ex => [...ex, prev.SocketId])
+        return null
+      })
+      resumeTimer()
     })
     conn.on('RoundAnswerReveal', (p: RoundAnswerRevealPayload) => {
-      setReveal(p); roundPhaseRef.current = 'reveal'; setRoundPhase('reveal'); setAnswerHint(null); setTimedOut(false); clearTimer()
+      setReveal(p); roundPhaseRef.current = 'reveal'; setRoundPhase('reveal')
+      setAnswerHint(null); setTimedOut(false); setBuzzedPlayer(null); clearTimer()
     })
     conn.on('RoundCardComplete', () => {
       setCurrentCardId(null); roundPhaseRef.current = 'idle'; setRoundPhase('idle')
-      setAnswerHint(null); setReveal(null); setBuzzedPlayer(null); setTimedOut(false); clearTimer()
+      setAnswerHint(null); setReveal(null); setBuzzedPlayer(null); setTimedOut(false)
+      setExhaustedBuzzers([]); clearTimer()
       conn.invoke('HostJoin').catch(() => {})
     })
     conn.on('ScoresUpdate', ({ Scores }: ScoresUpdatePayload) => setPlayers(Scores))
@@ -318,6 +329,7 @@ export default function HostPage() {
 
           {players.map(p => {
             const isPicker = p.SocketId === currentPickerId
+            const isExhausted = exhaustedBuzzers.includes(p.SocketId)
             return (
               <div
                 key={p.SocketId}
@@ -329,7 +341,8 @@ export default function HostPage() {
                 }}
               >
                 <div style={{ width: 10, height: 10, borderRadius: '50%', background: PLAYER_COLORS[p.Color], flexShrink: 0 }} />
-                <span style={{ flex: 1, fontSize: '0.9rem', fontWeight: 500 }}>{p.Name}</span>
+                <span style={{ flex: 1, fontSize: '0.9rem', fontWeight: 500, opacity: isExhausted ? 0.5 : 1 }}>{p.Name}</span>
+                {isExhausted && <span title="Already buzzed wrong this round" style={{ fontSize: '0.65rem', background: 'var(--red)', color: '#fff', borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>✗</span>}
                 {isPicker && <span title="Current picker — gets 2x" style={{ fontSize: '0.7rem', background: 'var(--yellow)', color: '#000', borderRadius: 4, padding: '1px 4px', fontWeight: 700 }}>2×</span>}
                 {editingScore?.playerId === p.SocketId ? (
                   <input
