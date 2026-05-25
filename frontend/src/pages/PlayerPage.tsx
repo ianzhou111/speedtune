@@ -428,31 +428,34 @@ export default function PlayerPage() {
         </div>
       )}
 
-      {/* Card grid */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
-        gap: 10,
-        width: '100%',
-        maxWidth: 600,
-        marginBottom: 24,
-      }}>
-        {cards.map(c => {
-          const complete = c.PlayedCount >= c.TotalSongs
-          const active = currentCard?.Id === c.Id
+      {/* Card grid — grouped by difficulty */}
+      <div style={{ width: '100%', maxWidth: 600, marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {[1, 2, 3, 4, 5].map(stars => {
+          const group = cards.filter(c => c.Stars === stars)
+          if (group.length === 0) return null
           return (
-            <div
-              key={c.Id}
-              style={{
-                background: active ? 'var(--accent)' : complete ? 'var(--surface2)' : 'var(--surface)',
-                border: `2px solid ${active ? 'var(--accent-light)' : 'var(--border)'}`,
-                borderRadius: 10, padding: '10px 6px', textAlign: 'center',
-                opacity: complete ? 0.4 : 1,
-              }}
-            >
-              <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: 2 }}>{c.Label}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--yellow)' }}>{'★'.repeat(c.Stars)}</div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{c.PlayedCount}/{c.TotalSongs}</div>
+            <div key={stars}>
+              <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 5 }}>
+                {'★'.repeat(stars)}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {group.map(c => {
+                  const complete = c.PlayedCount >= c.TotalSongs
+                  const active = currentCard?.Id === c.Id
+                  return (
+                    <div key={c.Id} style={{
+                      width: 100, flexShrink: 0,
+                      background: active ? 'var(--accent)' : complete ? 'var(--surface2)' : 'var(--surface)',
+                      border: `2px solid ${active ? 'var(--accent-light)' : 'var(--border)'}`,
+                      borderRadius: 10, padding: '10px 6px', textAlign: 'center',
+                      opacity: complete ? 0.4 : 1,
+                    }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: 2 }}>{c.Label}</div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{c.PlayedCount}/{c.TotalSongs}</div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )
         })}
