@@ -116,6 +116,8 @@ public class GameHub(GameEngineService engine, MongoDbService db) : Hub
 
     public async Task PlayerBuzz() => await engine.Buzz(Context.ConnectionId);
 
+    public async Task PlayerLeave() => await engine.PlayerDisconnect(Context.ConnectionId);
+
     // ── lifecycle ───────────────────────────────────────────────────────────
 
     public override async Task OnDisconnectedAsync(Exception? exception)

@@ -272,6 +272,13 @@ export default function PlayerPage() {
     )
   }
 
+  function handleLogout() {
+    connRef.current?.invoke('PlayerLeave').catch(() => {})
+    localStorage.removeItem('st_name')
+    localStorage.removeItem('st_color')
+    setPhase('join')
+  }
+
   if (phase === 'lobby') {
     return (
       <div className="page" style={{ alignItems: 'center' }}>
@@ -292,6 +299,13 @@ export default function PlayerPage() {
             </div>
           ))}
         </div>
+        <button
+          className="btn-secondary"
+          style={{ marginTop: 40, fontSize: '0.85rem', padding: '6px 16px', color: 'var(--text-muted)' }}
+          onClick={handleLogout}
+        >
+          ↩ Change name
+        </button>
       </div>
     )
   }
