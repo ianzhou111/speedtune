@@ -374,15 +374,29 @@ export default function DisplayPage() {
           </div>
         </div>
 
-        {/* Timer bar */}
-        {(roundPhase === 'guess' || roundPhase === 'buzzed') && timeLeft > 0 && (
-          <div style={{ flexShrink: 0 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1 }}>Time</span>
-              <span style={{ fontWeight: 700, color: timerColor, fontSize: '1.1rem', fontVariantNumeric: 'tabular-nums' }}>{timeLeft}s</span>
-            </div>
-            <div style={{ height: 8, borderRadius: 4, background: 'var(--surface2)', overflow: 'hidden' }}>
-              <div style={{ height: '100%', borderRadius: 4, background: timerColor, width: `${timerPct * 100}%`, transition: 'width 0.9s linear, background 0.5s' }} />
+        {/* Circular countdown timer */}
+        {(roundPhase === 'guess' || roundPhase === 'buzzed') && !timedOut && (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexShrink: 0, position: 'relative', height: 220 }}>
+            <svg width={220} height={220} style={{ transform: 'rotate(-90deg)' }}>
+              {/* Background track */}
+              <circle cx={110} cy={110} r={95} fill="none" stroke="var(--surface2)" strokeWidth={14} />
+              {/* Countdown arc — clockwise drain */}
+              <circle
+                cx={110} cy={110} r={95}
+                fill="none"
+                stroke={timerColor}
+                strokeWidth={14}
+                strokeLinecap="round"
+                strokeDasharray={2 * Math.PI * 95}
+                strokeDashoffset={(1 - timerPct) * 2 * Math.PI * 95}
+                style={{ transition: 'stroke-dashoffset 0.9s linear, stroke 0.5s' }}
+              />
+            </svg>
+            <div style={{
+              position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+            }}>
+              <span style={{ fontSize: '3.5rem', fontWeight: 800, color: timerColor, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{timeLeft}</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 2 }}>sec</span>
             </div>
           </div>
         )}
