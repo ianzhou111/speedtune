@@ -41,6 +41,14 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
             return;
         }
 
+        // Block new players from joining an active game (reconnects allowed)
+        if (session.Status == "active" && sameNamePlayer is null &&
+            !session.Players.Any(p => p.SocketId == socketId))
+        {
+            await hub.Clients.Client(socketId).SendAsync("Error", new { Message = "Game already in progress" });
+            return;
+        }
+
         // Color conflict — but allow if it's the reconnecting player keeping their own color
         if (session.Players.Any(p => p.Color == color && p.SocketId != socketId) && sameNamePlayer?.Color != color)
         {

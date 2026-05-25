@@ -164,9 +164,11 @@ export default function PlayerPage() {
       })
 
       conn.on('Error', ({ Message, RetryAfter }: ErrorPayload) => {
-        setPhase('join')   // fall back to join form on any error
+        setPhase('join')
         if (Message === 'banned') {
           setError(`You are temporarily banned. Try again in ${Math.ceil((RetryAfter ?? 30000) / 1000)}s.`)
+        } else if (Message === 'Game already in progress') {
+          setError('The game has already started. You can\'t join right now.')
         } else {
           setError(Message)
         }
