@@ -34,6 +34,9 @@ export default function DisplayPage() {
   const [videoVisible, setVideoVisible] = useState(false)
   const [finalScores, setFinalScores] = useState<Player[]>([])
   const [volume, setVolume] = useState(0.5)
+  const [vidTime, setVidTime] = useState(0)
+  const [vidDuration, setVidDuration] = useState(0)
+  const [vidPlaying, setVidPlaying] = useState(false)
 
   function applyVolume(v: number) {
     setVolume(v)
@@ -207,6 +210,13 @@ export default function DisplayPage() {
   }, [])
 
   const sorted = [...players].sort((a, b) => b.Score - a.Score)
+
+  function fmtTime(s: number) {
+    if (!isFinite(s)) return '0:00'
+    const m = Math.floor(s / 60)
+    const sec = Math.floor(s % 60)
+    return `${m}:${sec.toString().padStart(2, '0')}`
+  }
   const currentCard = cards.find(c => c.Id === currentCardId)
 
   // timer color: green → yellow → red
@@ -305,9 +315,62 @@ export default function DisplayPage() {
       {/* Center: main area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 24, gap: 16 }}>
 
-        {/* Video (hidden during guess, shown during reveal) */}
+        {/* Video + custom controls (hidden during guess, shown during reveal) */}
         <div style={{ width: '100%', maxWidth: 720, visibility: videoVisible ? 'visible' : 'hidden' }}>
-          <video ref={videoRef} style={{ width: '100%', borderRadius: 12, background: '#000' }} playsInline controls={false} />
+          <video
+            ref={videoRef}
+            style={{ width: '100%', borderRadius: '12px 12px 0 0', background: '#000', display: 'block' }}
+            playsInline
+            onTimeUpdate={e => setVidTime(e.currentTarget.currentTime)}
+            onLoadedMetadata={e => setVidDuration(e.currentTarget.duration)}
+            onPlay={() => setVidPlaying(true)}
+            onPause={() => setVidPlaying(false)}
+          />
+          {/* Controls bar */}
+          <div style={{
+            background: '#111', borderRadius: '0 0 12px 12px',
+            padding: '8px 14px 10px', display: 'flex', flexDirection: 'column', gap: 6,
+          }}>
+            {/* Progress bar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+                {fmtTime(vidTime)}
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={vidDuration || 1}
+                step={0.5}
+                value={vidTime}
+                onChange={e => {
+                  const t = parseFloat(e.target.value)
+                  if (videoRef.current) videoRef.current.currentTime = t
+                  setVidTime(t)
+                }}
+                style={{ flex: 1, accentColor: 'var(--accent)', height: 4 }}
+              />
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+                {fmtTime(vidDuration)}
+              </span>
+            </div>
+            {/* Play/pause + volume */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button
+                onClick={() => { const v = videoRef.current; if (!v) return; v.paused ? v.play() : v.pause() }}
+                style={{ background: 'none', color: '#fff', fontSize: '1.1rem', padding: '2px 6px', border: '1px solid #333', borderRadius: 6, flexShrink: 0 }}
+              >
+                {vidPlaying ? '⏸' : '▶'}
+              </button>
+              <span style={{ fontSize: '0.75rem' }}>{volume === 0 ? '🔇' : volume < 0.4 ? '🔉' : '🔊'}</span>
+              <input
+                type="range"
+                min={0} max={1} step={0.01}
+                value={volume}
+                onChange={e => applyVolume(parseFloat(e.target.value))}
+                style={{ width: 80, accentColor: 'var(--accent)' }}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Timer bar — shown during guess/buzzed */}
