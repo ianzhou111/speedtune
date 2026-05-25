@@ -72,6 +72,9 @@ export default function AdminGameEditor() {
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState('')
   const [targetCardId, setTargetCardId] = useState<string | null>(null)
+  const [filterOpening, setFilterOpening] = useState(true)
+  const [filterEnding, setFilterEnding] = useState(true)
+  const [filterInsert, setFilterInsert] = useState(true)
 
   // Collapsed cards
   const [collapsedCards, setCollapsedCards] = useState<Set<string>>(new Set())
@@ -195,8 +198,15 @@ export default function AdminGameEditor() {
         anime: searchAnime,
         song: searchSong,
         artist: searchArtist,
+        opening: filterOpening,
+        ending: filterEnding,
+        insert: filterInsert,
       })
-      setSearchResults(results)
+      const sorted = [...results].sort((a, b) => {
+        const anime = a.AnimeName.localeCompare(b.AnimeName)
+        return anime !== 0 ? anime : a.SongName.localeCompare(b.SongName)
+      })
+      setSearchResults(sorted)
     } catch (err) {
       setSearchError(err instanceof Error ? err.message : 'Search failed')
     } finally {
@@ -283,6 +293,19 @@ export default function AdminGameEditor() {
             onChange={e => setSearchArtist(e.target.value)}
             style={{ flex: '1 1 180px' }}
           />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0, padding: '0 4px' }}>
+            {([['OP', filterOpening, setFilterOpening], ['ED', filterEnding, setFilterEnding], ['IN', filterInsert, setFilterInsert]] as const).map(([label, val, set]) => (
+              <label key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, color: val ? 'var(--text)' : 'var(--text-muted)', textTransform: 'none', letterSpacing: 0, margin: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={val}
+                  onChange={e => set(e.target.checked)}
+                  style={{ width: 'auto', padding: 0, accentColor: 'var(--accent)' }}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
           <button type="submit" className="btn-primary" disabled={searching}>
             {searching ? 'Searching…' : 'Search'}
           </button>

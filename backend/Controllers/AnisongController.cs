@@ -37,9 +37,9 @@ public class AnisongController(IHttpClientFactory httpFactory) : ControllerBase
             artist_search_filter     = (object?)artistFilter,
             and_logic        = true,
             ignore_duplicate = false,
-            opening_filter   = true,
-            ending_filter    = true,
-            insert_filter    = true,   // always include inserts — movies are insert-only
+            opening_filter   = req.Opening,
+            ending_filter    = req.Ending,
+            insert_filter    = req.Insert,
         };
 
         var response = await client.PostAsJsonAsync($"{AnisongBase}/search_request", payload);
@@ -80,7 +80,9 @@ public record AnisongSearchRequest(
     string? Anime,
     string? Song,
     string? Artist,
-    bool IncludeInserts = false);
+    bool Opening = true,
+    bool Ending  = true,
+    bool Insert  = true);
 
 public class AnisongResult
 {

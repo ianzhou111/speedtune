@@ -94,7 +94,9 @@ export interface AnisongSearchParams {
   anime?: string
   song?: string
   artist?: string
-  includeInserts?: boolean
+  opening?: boolean
+  ending?: boolean
+  insert?: boolean
 }
 
 export async function searchAnisong(params: AnisongSearchParams): Promise<SongEntry[]> {
@@ -104,7 +106,9 @@ export async function searchAnisong(params: AnisongSearchParams): Promise<SongEn
       Anime: params.anime ?? '',
       Song: params.song ?? '',
       Artist: params.artist ?? '',
-      IncludeInserts: params.includeInserts ?? false,
+      Opening: params.opening ?? true,
+      Ending: params.ending ?? true,
+      Insert: params.insert ?? true,
     }),
   })
 }
