@@ -73,6 +73,18 @@ export default function AdminGameEditor() {
   const [searchError, setSearchError] = useState('')
   const [targetCardId, setTargetCardId] = useState<string | null>(null)
 
+  // Collapsed cards
+  const [collapsedCards, setCollapsedCards] = useState<Set<string>>(new Set())
+
+  function toggleCollapse(cardId: string) {
+    setCollapsedCards(prev => {
+      const next = new Set(prev)
+      if (next.has(cardId)) next.delete(cardId)
+      else next.add(cardId)
+      return next
+    })
+  }
+
   // Preview player state
   const [previewSong, setPreviewSong] = useState<SongEntry | null>(null)
 
@@ -108,7 +120,7 @@ export default function AdminGameEditor() {
     let n = 1
     while (existing.has(label)) { label = `${base} ${n++}` }
     const newCard: Card = { Id: crypto.randomUUID(), Label: label, Stars: 1, Songs: [] }
-    const updated = { ...game, Cards: [...game.Cards, newCard] }
+    const updated = { ...game, Cards: [newCard, ...game.Cards] }
     setGame(updated)
   }
 
@@ -352,13 +364,23 @@ export default function AdminGameEditor() {
         {game.Cards.map(card => (
           <div key={card.Id} className="card">
             {/* Card header */}
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: collapsedCards.has(card.Id) ? 0 : 12 }}>
+              <button
+                style={{ background: 'none', color: 'var(--text-muted)', padding: '2px 4px', fontSize: '0.8rem', flexShrink: 0, transition: 'transform 0.15s' }}
+                onClick={() => toggleCollapse(card.Id)}
+                title={collapsedCards.has(card.Id) ? 'Expand' : 'Collapse'}
+              >
+                {collapsedCards.has(card.Id) ? '▶' : '▼'}
+              </button>
               <input
                 value={card.Label}
                 onChange={e => updateCard(card.Id, { Label: e.target.value })}
                 style={{ flex: 1 }}
               />
               <Stars n={card.Stars} onClick={s => updateCard(card.Id, { Stars: s })} />
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+                {card.Songs.length} song{card.Songs.length !== 1 ? 's' : ''}
+              </span>
               <button
                 className="btn-danger"
                 style={{ padding: '6px 12px' }}
@@ -368,11 +390,11 @@ export default function AdminGameEditor() {
               </button>
             </div>
 
-            {/* Songs */}
-            {card.Songs.length === 0 && (
+            {/* Songs — hidden when collapsed */}
+            {!collapsedCards.has(card.Id) && card.Songs.length === 0 && (
               <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No songs yet. Search above and add to this card.</p>
             )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: collapsedCards.has(card.Id) ? 'none' : 'flex', flexDirection: 'column', gap: 6 }}>
               {card.Songs.map((song, idx) => (
                 <div
                   key={idx}
