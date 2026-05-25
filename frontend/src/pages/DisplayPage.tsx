@@ -54,6 +54,28 @@ export default function DisplayPage() {
     setTimeLeft(0)
   }
 
+  function pauseTimer() {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+    // timeLeft is preserved so the circle stays where it paused
+  }
+
+  function resumeTimer() {
+    if (timerRef.current) return // already running
+    timerRef.current = setInterval(() => {
+      setTimeLeft(t => {
+        if (t <= 1) {
+          clearTimer()
+          if (roundPhaseRef.current === 'guess') {
+            setTimedOut(true)
+            videoRef.current?.pause()
+          }
+          return 0
+        }
+        return t - 1
+      })
+    }, 1000)
+  }
+
   function startTimer(duration: number) {
     clearTimer()
     setTimedOut(false)
@@ -150,7 +172,7 @@ export default function DisplayPage() {
         setBuzzedPlayer(pl)
         _setRoundPhase('buzzed')
         setTimedOut(false)
-        clearTimer()
+        pauseTimer() // keep remaining time visible, just stop counting
       })
 
       conn.on('RoundAudioPause', () => { videoRef.current?.pause() })
@@ -164,7 +186,7 @@ export default function DisplayPage() {
           vid.muted = true
           vid.play().then(() => { vid.muted = false }).catch(() => {})
         }
-        // Don't restart timer — player already guessed wrong
+        resumeTimer() // continue counting down from where it paused
       })
 
       conn.on('RoundAnswerReveal', (p: RoundAnswerRevealPayload) => {

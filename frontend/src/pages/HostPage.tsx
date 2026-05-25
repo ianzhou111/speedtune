@@ -58,6 +58,24 @@ export default function HostPage() {
     setTimeLeft(0)
   }
 
+  function pauseTimer() {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+  }
+
+  function resumeTimer() {
+    if (timerRef.current) return
+    timerRef.current = setInterval(() => {
+      setTimeLeft(t => {
+        if (t <= 1) {
+          clearTimer()
+          if (roundPhaseRef.current === 'guess') setTimedOut(true)
+          return 0
+        }
+        return t - 1
+      })
+    }, 1000)
+  }
+
   function startTimer(duration: number) {
     clearTimer()
     setTimedOut(false)
@@ -124,7 +142,10 @@ export default function HostPage() {
     })
     conn.on('RoundAnswerHint', (hint: RoundAnswerHintPayload) => setAnswerHint(hint))
     conn.on('RoundBuzz', ({ Player: p }: { Player: Player }) => {
-      setBuzzedPlayer(p); roundPhaseRef.current = 'buzzed'; setRoundPhase('buzzed'); setTimedOut(false); clearTimer()
+      setBuzzedPlayer(p); roundPhaseRef.current = 'buzzed'; setRoundPhase('buzzed'); setTimedOut(false); pauseTimer()
+    })
+    conn.on('RoundAudioResume', () => {
+      roundPhaseRef.current = 'guess'; setRoundPhase('guess'); setBuzzedPlayer(null); resumeTimer()
     })
     conn.on('RoundAnswerReveal', (p: RoundAnswerRevealPayload) => {
       setReveal(p); roundPhaseRef.current = 'reveal'; setRoundPhase('reveal'); setAnswerHint(null); setTimedOut(false); clearTimer()
