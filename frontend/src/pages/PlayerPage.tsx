@@ -42,6 +42,7 @@ export default function PlayerPage() {
   const [timeLeft, setTimeLeft] = useState(0)
   const [clipDuration, setClipDuration] = useState(60)
   const [error, setError] = useState('')
+  const [timedOut, setTimedOut] = useState(false)
   const [currentPickerId, setCurrentPickerId] = useState<string | null>(null)
   const [pickOrder, setPickOrder] = useState<string[]>([])
   const mySocketId = useRef('')
@@ -122,9 +123,12 @@ export default function PlayerPage() {
         setClipDuration(p.ClipDuration)
         setBuzzedPlayer(null)
         setRevealInfo(null)
+        setTimedOut(false)
         setRoundPhase('guess')
         startTimer(p.ClipDuration)
       })
+
+      conn.on('RoundTimedOut', () => setTimedOut(true))
 
       conn.on('RoundBuzz', ({ Player: p }: RoundBuzzPayload) => {
         setBuzzedPlayer(p)
@@ -195,7 +199,7 @@ export default function PlayerPage() {
       clearTimer()
       const EVENTS = ['SessionState','LobbyPlayerJoined','LobbyPlayerLeft','LobbyPlayerKicked',
         'GameStarted','RoundSongStart','RoundBuzz','RoundAudioPause','RoundAudioResume',
-        'RoundAnswerReveal','RoundCardComplete','ScoresUpdate','GameEnded','Error','PickerUpdate']
+        'RoundAnswerReveal','RoundCardComplete','ScoresUpdate','GameEnded','Error','PickerUpdate','RoundTimedOut']
       EVENTS.forEach(e => connRef.current?.off(e))
     }
   }, [])
@@ -219,8 +223,7 @@ export default function PlayerPage() {
   }
 
   const myId = mySocketId.current
-  const isExhausted = roundPhase === 'buzzed' || roundPhase === 'reveal'
-  const canBuzz = roundPhase === 'guess'
+  const canBuzz = roundPhase === 'guess' && !timedOut
 
   // timer color: green → yellow → red
   const timerPct = clipDuration > 0 ? timeLeft / clipDuration : 0
@@ -463,7 +466,11 @@ export default function PlayerPage() {
         disabled={!canBuzz}
         onClick={buzz}
       >
-        {roundPhase === 'idle' ? 'Waiting…' : roundPhase === 'guess' ? '🔔 BUZZ' : roundPhase === 'buzzed' ? 'Buzzed!' : '…'}
+        {roundPhase === 'idle' ? 'Waiting…'
+          : timedOut ? '⏰ Time\'s up'
+          : roundPhase === 'guess' ? '🔔 BUZZ'
+          : roundPhase === 'buzzed' ? 'Buzzed!'
+          : '…'}
       </button>
     </div>
   )

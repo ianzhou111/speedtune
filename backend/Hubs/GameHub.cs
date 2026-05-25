@@ -112,6 +112,12 @@ public class GameHub(GameEngineService engine, MongoDbService db) : Hub
         await engine.SetScore(playerId, score);
     }
 
+    public async Task HostTimeUp()
+    {
+        if (!IsHost()) return;
+        await engine.TimeUp();
+    }
+
     public async Task HostSetPicker(string playerId)
     {
         if (!IsHost()) return;

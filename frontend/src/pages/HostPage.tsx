@@ -69,7 +69,10 @@ export default function HostPage() {
       setTimeLeft(t => {
         if (t <= 1) {
           clearTimer()
-          if (roundPhaseRef.current === 'guess') setTimedOut(true)
+          if (roundPhaseRef.current === 'guess') {
+            setTimedOut(true)
+            connRef.current?.invoke('HostTimeUp').catch(console.error)
+          }
           return 0
         }
         return t - 1
@@ -85,7 +88,10 @@ export default function HostPage() {
       setTimeLeft(t => {
         if (t <= 1) {
           clearTimer()
-          if (roundPhaseRef.current === 'guess') setTimedOut(true)
+          if (roundPhaseRef.current === 'guess') {
+            setTimedOut(true)
+            connRef.current?.invoke('HostTimeUp').catch(console.error)
+          }
           return 0
         }
         return t - 1

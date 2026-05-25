@@ -168,10 +168,21 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
 
     // ── buzz ───────────────────────────────────────────────────────────────
 
+    public async Task TimeUp()
+    {
+        var session = await GetActiveSession();
+        if (session?.CurrentRound is null || session.CurrentRound.Phase != "guess") return;
+
+        session.CurrentRound.IsTimedOut = true;
+        await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
+        await hub.Clients.All.SendAsync("RoundTimedOut");
+    }
+
     public async Task Buzz(string socketId)
     {
         var session = await GetActiveSession();
         if (session?.CurrentRound is null || session.CurrentRound.Phase != "guess") return;
+        if (session.CurrentRound.IsTimedOut) return;
 
         var player = session.Players.FirstOrDefault(p => p.SocketId == socketId);
         if (player is null) return;

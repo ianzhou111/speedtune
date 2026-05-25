@@ -25,6 +25,7 @@ public class CurrentRound
     public string Phase { get; set; } = "guess"; // "guess" | "reveal"
     public string? BuzzedPlayerId { get; set; }
     public List<string> ExhaustedBuzzers { get; set; } = new();
+    public bool IsTimedOut { get; set; }
 }
 
 public class Session
