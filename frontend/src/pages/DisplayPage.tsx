@@ -131,9 +131,12 @@ export default function DisplayPage() {
             if (p.StartPercent > 0 && isFinite(vid.duration)) {
               vid.currentTime = (p.StartPercent / 100) * vid.duration
             }
-            vid.play()
-              .then(() => { vid.muted = false })
-              .catch(() => {})
+            // Only play if still in guess phase — buzz may have arrived before load finished
+            if (roundPhaseRef.current === 'guess') {
+              vid.play()
+                .then(() => { vid.muted = false })
+                .catch(() => {})
+            }
           }, { once: true })
           vid.load()
         }
