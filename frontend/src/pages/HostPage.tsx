@@ -162,6 +162,13 @@ export default function HostPage() {
       })
       resumeTimer()
     })
+    conn.on('RoundTimedOut', () => {
+      // All exhausted OR host timer expired — show time's up, wait for manual reveal
+      roundPhaseRef.current = 'guess'; setRoundPhase('guess')
+      setBuzzedPlayer(null)
+      setTimedOut(true)
+      clearTimer()
+    })
     conn.on('RoundAnswerReveal', (p: RoundAnswerRevealPayload) => {
       setReveal(p); roundPhaseRef.current = 'reveal'; setRoundPhase('reveal')
       setAnswerHint(null); setTimedOut(false); setBuzzedPlayer(null); clearTimer()

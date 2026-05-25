@@ -172,6 +172,7 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
     {
         var session = await GetActiveSession();
         if (session?.CurrentRound is null || session.CurrentRound.Phase != "guess") return;
+        if (session.CurrentRound.IsTimedOut) return;
 
         session.CurrentRound.IsTimedOut = true;
         await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
@@ -233,14 +234,18 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
             round.ExhaustedBuzzers.Add(round.BuzzedPlayerId!);
             round.BuzzedPlayerId = null;
             round.Phase = "guess";
+
+            bool allExhausted = session.Players.All(p => round.ExhaustedBuzzers.Contains(p.SocketId));
+            if (allExhausted) round.IsTimedOut = true;
+
             await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
 
             await hub.Clients.All.SendAsync("ScoresUpdate", BuildScores(session.Players));
             await hub.Clients.All.SendAsync("RoundAudioResume");
 
-            // Auto-reveal if everyone has guessed
-            if (session.Players.All(p => round.ExhaustedBuzzers.Contains(p.SocketId)))
-                await RevealAndAdvance(session, game, card, song, 0, null);
+            // All players exhausted — let audience try; host reveals when ready
+            if (allExhausted)
+                await hub.Clients.All.SendAsync("RoundTimedOut");
         }
     }
 

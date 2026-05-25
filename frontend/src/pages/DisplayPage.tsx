@@ -222,6 +222,14 @@ export default function DisplayPage() {
         }
       })
 
+      conn.on('RoundTimedOut', () => {
+        setBuzzedPlayer(null)
+        _setRoundPhase('guess')
+        setTimedOut(true)
+        clearTimer()
+        // Don't pause — audio continues so audience can hear the song
+      })
+
       conn.on('RoundCardComplete', () => {
         setCurrentCardId(null)
         _setRoundPhase('idle')
@@ -257,7 +265,7 @@ export default function DisplayPage() {
       clearTimer()
       const EVENTS = ['SessionState','LobbyPlayerJoined','LobbyPlayerLeft','GameStarted',
         'RoundSongStart','RoundBuzz','RoundAudioPause','RoundAudioPlay','RoundAudioResume','RoundAnswerReveal',
-        'RoundCardComplete','ScoresUpdate','CardsUpdate','GameEnded','PickerUpdate']
+        'RoundCardComplete','ScoresUpdate','CardsUpdate','GameEnded','PickerUpdate','RoundTimedOut']
       EVENTS.forEach(e => connRef.current?.off(e))
     }
   }, [])
