@@ -13,6 +13,8 @@ public class SongEntry
     public string AnimeVintage { get; set; } = "";
     public string SongType { get; set; } = "";
     public string VideoUrl { get; set; } = "";
+    /// <summary>Song duration in seconds (from AnisongDB), used to calculate playback range.</summary>
+    public float SongLength { get; set; } = 0;
     /// <summary>Minimum playback start point as a percentage 0–100.</summary>
     public int StartMin { get; set; } = 0;
     /// <summary>Maximum playback start point as a percentage 0–100.</summary>

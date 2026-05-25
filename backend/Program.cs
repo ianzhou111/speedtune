@@ -82,7 +82,14 @@ app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Serve the built Vite frontend from wwwroot (production only)
+app.UseDefaultFiles();   // serve index.html at /
+app.UseStaticFiles();    // serve JS/CSS/assets
+
 app.MapControllers();
 app.MapHub<GameHub>("/hub");
+
+// SPA fallback — any unmatched route returns index.html so React Router works
+app.MapFallbackToFile("index.html");
 
 app.Run();

@@ -62,9 +62,10 @@ public class AnisongController(IHttpClientFactory httpFactory) : ControllerBase
                 r.AnnId,
                 r.SongName,
                 r.SongArtist,
-                r.AnimeName,
+                AnimeName = !string.IsNullOrWhiteSpace(r.AnimeENName) ? r.AnimeENName : r.AnimeJPName,
                 r.AnimeVintage,
                 r.SongType,
+                r.SongLength,
                 VideoUrl = ToUrl(r.HQ) ?? ToUrl(r.MQ) ?? ToUrl(r.Audio) ?? ""
             })
             .ToList();
@@ -83,13 +84,15 @@ public record AnisongSearchRequest(
 
 public class AnisongResult
 {
-    [JsonPropertyName("annId")]     public int AnnId { get; set; }
-    [JsonPropertyName("songName")]  public string SongName { get; set; } = "";
-    [JsonPropertyName("songArtist")] public string SongArtist { get; set; } = "";
-    [JsonPropertyName("animeName")] public string AnimeName { get; set; } = "";
+    [JsonPropertyName("annId")]       public int AnnId { get; set; }
+    [JsonPropertyName("songName")]    public string SongName { get; set; } = "";
+    [JsonPropertyName("songArtist")]  public string SongArtist { get; set; } = "";
+    [JsonPropertyName("animeENName")] public string AnimeENName { get; set; } = "";
+    [JsonPropertyName("animeJPName")] public string AnimeJPName { get; set; } = "";
     [JsonPropertyName("animeVintage")] public string AnimeVintage { get; set; } = "";
-    [JsonPropertyName("songType")]  public string SongType { get; set; } = "";
-    [JsonPropertyName("HQ")]        public string? HQ { get; set; }
-    [JsonPropertyName("MQ")]        public string? MQ { get; set; }
-    [JsonPropertyName("audio")]     public string? Audio { get; set; }
+    [JsonPropertyName("songType")]    public string SongType { get; set; } = "";
+    [JsonPropertyName("songLength")]  public float SongLength { get; set; } = 0;
+    [JsonPropertyName("HQ")]          public string? HQ { get; set; }
+    [JsonPropertyName("MQ")]          public string? MQ { get; set; }
+    [JsonPropertyName("audio")]       public string? Audio { get; set; }
 }

@@ -1,8 +1,7 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { gamesApi, searchAnisong, isAuthenticated } from '../lib/api'
 import type { Game, Card, SongEntry } from '../lib/types'
-import { PLAYER_COLORS } from '../lib/types'
 
 const STARS = [1, 2, 3, 4, 5]
 
@@ -153,10 +152,16 @@ export default function AdminGameEditor() {
 
   function addSongToCard(cardId: string, song: SongEntry) {
     if (!game) return
+    // Auto-calculate start range: min=0, max=latest point where full clip still fits
+    const clipDuration = game.Settings.ClipDuration
+    const startMax = song.SongLength > clipDuration
+      ? Math.max(0, Math.floor((1 - clipDuration / song.SongLength) * 100))
+      : 0
+    const songWithDefaults: SongEntry = { ...song, StartMin: 0, StartMax: startMax }
     const updated = {
       ...game,
       Cards: game.Cards.map(c =>
-        c.Id === cardId ? { ...c, Songs: [...c.Songs, song] } : c
+        c.Id === cardId ? { ...c, Songs: [...c.Songs, songWithDefaults] } : c
       ),
     }
     setGame(updated)

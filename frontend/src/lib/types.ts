@@ -95,8 +95,9 @@ export interface SongEntry {
   AnimeVintage: string
   SongType: string
   VideoUrl: string
-  StartMin: number   // 0–100 %
-  StartMax: number   // 0–100 %
+  SongLength: number  // seconds
+  StartMin: number    // 0–100 %
+  StartMax: number    // 0–100 %
 }
 
 export interface Card {

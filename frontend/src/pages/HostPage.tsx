@@ -299,9 +299,10 @@ export default function HostPage() {
               background: 'var(--surface2)', borderRadius: 10, padding: '12px 16px',
               borderLeft: '4px solid var(--accent)',
             }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase' }}>Answer (host only)</div>
-              <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>{answerHint.SongName} — {answerHint.SongArtist}</div>
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{answerHint.AnimeName}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Answer (host only)</div>
+              <div style={{ fontWeight: 800, fontSize: '1.3rem', color: 'var(--accent-light)', marginBottom: 3 }}>{answerHint.AnimeName}</div>
+              <div style={{ fontWeight: 500, fontSize: '0.95rem', color: 'var(--text)' }}>{answerHint.SongName}</div>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{answerHint.SongArtist}</div>
             </div>
           )}
 
@@ -357,11 +358,12 @@ export default function HostPage() {
               {/* Reveal state */}
               {roundPhase === 'reveal' && reveal && (
                 <div style={{ marginTop: 12 }}>
-                  <div style={{ padding: '10px', background: 'var(--surface2)', borderRadius: 8, marginBottom: 12 }}>
-                    <div style={{ fontWeight: 700 }}>{reveal.SongName} — {reveal.SongArtist}</div>
-                    <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{reveal.AnimeName}</div>
+                  <div style={{ padding: '12px 14px', background: 'var(--surface2)', borderRadius: 8, marginBottom: 12 }}>
+                    <div style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--accent-light)', marginBottom: 2 }}>{reveal.AnimeName}</div>
+                    <div style={{ fontWeight: 500, fontSize: '0.95rem', color: 'var(--text)' }}>{reveal.SongName}</div>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{reveal.SongArtist}</div>
                     {reveal.PointsAwarded > 0 && (
-                      <div style={{ color: 'var(--green)', marginTop: 4 }}>
+                      <div style={{ color: 'var(--green)', marginTop: 6, fontWeight: 600 }}>
                         +{reveal.PointsAwarded} → {players.find(p => p.SocketId === reveal.WinnerId)?.Name}
                       </div>
                     )}
