@@ -380,7 +380,20 @@ export default function AdminGameEditor() {
       {/* Cards */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <h3 style={{ color: 'var(--text)' }}>Cards ({game.Cards.length})</h3>
-        <button className="btn-secondary" onClick={addCard}>+ Add Card</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            className="btn-secondary"
+            style={{ padding: '6px 12px', fontSize: '0.85rem' }}
+            onClick={() => setCollapsedCards(
+              collapsedCards.size === game.Cards.length
+                ? new Set()
+                : new Set(game.Cards.map(c => c.Id))
+            )}
+          >
+            {collapsedCards.size === game.Cards.length ? '▶ Expand All' : '▼ Collapse All'}
+          </button>
+          <button className="btn-secondary" onClick={addCard}>+ Add Card</button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
