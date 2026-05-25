@@ -1,0 +1,11 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0 && export PATH=\"$HOME/.dotnet:$PATH\" && cd frontend && npm install && npm run build && mkdir -p ../backend/wwwroot && cp -r dist/* ../backend/wwwroot/ && cd ../backend && $HOME/.dotnet/dotnet publish -c Release -r linux-x64 --self-contained true -o out"
+  },
+  "deploy": {
+    "startCommand": "cd backend/out && ./SpeedTune.Api --urls http://0.0.0.0:$PORT",
+    "restartPolicyType": "ON_FAILURE"
+  }
+}
