@@ -39,6 +39,13 @@ public class Session
     public List<Player> Players { get; set; } = new();
     public List<PlayedSong> PlayedSongs { get; set; } = new();
     public CurrentRound? CurrentRound { get; set; }
+    public List<string> PickOrder { get; set; } = new();
+    public int CurrentPickerIndex { get; set; } = 0;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    [BsonIgnore]
+    public string? CurrentPickerId => PickOrder.Count > 0
+        ? PickOrder[CurrentPickerIndex % PickOrder.Count]
+        : null;
 }

@@ -112,6 +112,12 @@ public class GameHub(GameEngineService engine, MongoDbService db) : Hub
         await engine.SetScore(playerId, score);
     }
 
+    public async Task HostSetPicker(string playerId)
+    {
+        if (!IsHost()) return;
+        await engine.SetPicker(playerId);
+    }
+
     // ── player buzzer ───────────────────────────────────────────────────────
 
     public async Task PlayerBuzz() => await engine.Buzz(Context.ConnectionId);

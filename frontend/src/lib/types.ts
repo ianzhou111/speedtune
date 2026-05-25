@@ -38,6 +38,8 @@ export interface SessionState {
   Players: Player[]
   Cards: CardSummary[]
   CurrentRound: CurrentRound | null
+  CurrentPickerId: string | null
+  PickOrder: string[]
 }
 
 // ── SignalR event payloads ─────────────────────────────────────────────────
@@ -83,6 +85,11 @@ export interface GameEndedPayload {
 export interface ErrorPayload {
   Message: string
   RetryAfter?: number
+}
+
+export interface PickerUpdatePayload {
+  CurrentPickerId: string | null
+  PickOrder: string[]
 }
 
 // ── REST API models ────────────────────────────────────────────────────────

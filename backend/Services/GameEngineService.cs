@@ -67,6 +67,8 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         {
             // Reconnect — take over existing slot so score is preserved
             oldSocketId = sameNamePlayer.SocketId;
+            var pickIdx = session.PickOrder.IndexOf(oldSocketId);
+            if (pickIdx != -1) session.PickOrder[pickIdx] = socketId;
             sameNamePlayer.SocketId = socketId;
             sameNamePlayer.Color = color;
         }
@@ -79,7 +81,11 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
 
         // Tell everyone the old socket is gone before announcing the new one
         if (oldSocketId is not null)
+        {
             await hub.Clients.All.SendAsync("LobbyPlayerLeft", new { PlayerId = oldSocketId });
+            if (session.PickOrder.Count > 0)
+                await hub.Clients.All.SendAsync("PickerUpdate", BuildPickerDto(session));
+        }
 
         var game = await GetGame(session.GameId);
         await hub.Clients.Client(socketId).SendAsync("SessionState", BuildPublicState(session, game));
@@ -95,8 +101,11 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         if (session is null || session.Status != "lobby") return;
 
         session.Status = "active";
+        session.PickOrder = session.Players.OrderBy(_ => Random.Shared.Next()).Select(p => p.SocketId).ToList();
+        session.CurrentPickerIndex = 0;
         await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
         await hub.Clients.All.SendAsync("GameStarted");
+        await hub.Clients.All.SendAsync("PickerUpdate", BuildPickerDto(session));
     }
 
     // ── open card ──────────────────────────────────────────────────────────
@@ -197,9 +206,12 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         if (correct)
         {
             var winner = session.Players.FirstOrDefault(p => p.SocketId == round.BuzzedPlayerId);
-            if (winner is not null) winner.Score += pointValue;
+            var effectivePoints = (round.BuzzedPlayerId is not null && round.BuzzedPlayerId == session.CurrentPickerId)
+                ? pointValue * 2
+                : pointValue;
+            if (winner is not null) winner.Score += effectivePoints;
             await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
-            await RevealAndAdvance(session, game, card, song, pointValue, round.BuzzedPlayerId);
+            await RevealAndAdvance(session, game, card, song, effectivePoints, round.BuzzedPlayerId);
         }
         else
         {
@@ -249,6 +261,19 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
 
         await hub.Clients.Client(playerId).SendAsync("LobbyPlayerKicked");
         await hub.Clients.All.SendAsync("LobbyPlayerLeft", new { PlayerId = playerId });
+    }
+
+    // ── set picker (host manual override) ─────────────────────────────────
+
+    public async Task SetPicker(string playerId)
+    {
+        var session = await GetActiveSession();
+        if (session is null) return;
+        var idx = session.PickOrder.IndexOf(playerId);
+        if (idx == -1) return;
+        session.CurrentPickerIndex = idx;
+        await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
+        await hub.Clients.All.SendAsync("PickerUpdate", BuildPickerDto(session));
     }
 
     // ── set score (host manual override) ──────────────────────────────────
@@ -377,12 +402,21 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         else
         {
             session.CurrentRound = null;
+            if (session.PickOrder.Count > 0)
+                session.CurrentPickerIndex = (session.CurrentPickerIndex + 1) % session.PickOrder.Count;
             await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
             await hub.Clients.All.SendAsync("RoundCardComplete");
+            await hub.Clients.All.SendAsync("PickerUpdate", BuildPickerDto(session));
         }
     }
 
     // ── helpers ────────────────────────────────────────────────────────────
+
+    private static object BuildPickerDto(Session session) => new
+    {
+        CurrentPickerId = session.CurrentPickerId,
+        PickOrder = session.PickOrder,
+    };
 
     private static IEnumerable<object> BuildCardSummaries(Session session, Game game)
     {
@@ -437,7 +471,9 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
             session.Status,
             Players = session.Players.Select(BuildPlayerDto),
             Cards = cards,
-            CurrentRound = currentRound
+            CurrentRound = currentRound,
+            CurrentPickerId = session.CurrentPickerId,
+            PickOrder = session.PickOrder,
         };
     }
 }

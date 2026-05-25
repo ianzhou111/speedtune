@@ -3,7 +3,7 @@ import * as signalR from '@microsoft/signalr'
 import { startConnection } from '../lib/signalr'
 import type {
   SessionState, Player, CardSummary,
-  RoundSongStartPayload, RoundAnswerRevealPayload, ScoresUpdatePayload, GameEndedPayload,
+  RoundSongStartPayload, RoundAnswerRevealPayload, ScoresUpdatePayload, GameEndedPayload, PickerUpdatePayload,
 } from '../lib/types'
 import { PLAYER_COLORS } from '../lib/types'
 
@@ -37,6 +37,8 @@ export default function DisplayPage() {
   const [vidTime, setVidTime] = useState(0)
   const [vidDuration, setVidDuration] = useState(0)
   const [vidPlaying, setVidPlaying] = useState(false)
+  const [currentPickerId, setCurrentPickerId] = useState<string | null>(null)
+  const [pickOrder, setPickOrder] = useState<string[]>([])
 
   function applyVolume(v: number) {
     setVolume(v)
@@ -73,6 +75,8 @@ export default function DisplayPage() {
         setStatus(state.Status as 'lobby' | 'active' | 'ended')
         setPlayers(state.Players ?? [])
         setCards(state.Cards ?? [])
+        setCurrentPickerId(state.CurrentPickerId ?? null)
+        setPickOrder(state.PickOrder ?? [])
         if (state.CurrentRound) {
           const cr = state.CurrentRound
           setCurrentCardId(cr.CardId)
@@ -187,6 +191,10 @@ export default function DisplayPage() {
 
       conn.on('ScoresUpdate', ({ Scores }: ScoresUpdatePayload) => setPlayers(Scores ?? []))
       conn.on('CardsUpdate', ({ Cards }: { Cards: CardSummary[] }) => setCards(Cards ?? []))
+      conn.on('PickerUpdate', (p: PickerUpdatePayload) => {
+        setCurrentPickerId(p.CurrentPickerId)
+        setPickOrder(p.PickOrder)
+      })
 
       conn.on('GameEnded', ({ FinalScores }: GameEndedPayload) => {
         setFinalScores(FinalScores ?? [])
@@ -204,7 +212,7 @@ export default function DisplayPage() {
       clearTimer()
       const EVENTS = ['SessionState','LobbyPlayerJoined','LobbyPlayerLeft','GameStarted',
         'RoundSongStart','RoundBuzz','RoundAudioPause','RoundAudioPlay','RoundAudioResume','RoundAnswerReveal',
-        'RoundCardComplete','ScoresUpdate','CardsUpdate','GameEnded']
+        'RoundCardComplete','ScoresUpdate','CardsUpdate','GameEnded','PickerUpdate']
       EVENTS.forEach(e => connRef.current?.off(e))
     }
   }, [])
@@ -406,7 +414,7 @@ export default function DisplayPage() {
                 <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{reveal.AnimeName}</div>
                 {reveal.PointsAwarded > 0 && reveal.WinnerId && (
                   <div style={{ color: 'var(--green)', fontWeight: 700, marginTop: 8, fontSize: '1.1rem' }}>
-                    +{reveal.PointsAwarded} → {players.find(p => p.SocketId === reveal.WinnerId)?.Name}
+                    +{reveal.PointsAwarded}{reveal.WinnerId === currentPickerId ? ' 🌟×2' : ''} → {players.find(p => p.SocketId === reveal.WinnerId)?.Name}
                   </div>
                 )}
               </div>
@@ -415,6 +423,35 @@ export default function DisplayPage() {
             {roundPhase === 'guess' && (
               <div style={{ fontSize: '1.2rem', color: 'var(--text-muted)', marginTop: 4 }}>🎵 Listening…</div>
             )}
+          </div>
+        )}
+
+        {/* Picker strip — shown in idle phase */}
+        {roundPhase === 'idle' && pickOrder.length > 0 && (
+          <div style={{ width: '100%', maxWidth: 720, background: 'var(--surface)', borderRadius: 10, padding: '10px 16px' }}>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Picking order</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              {pickOrder.map((id, i) => {
+                const p = players.find(x => x.SocketId === id)
+                if (!p) return null
+                const isCurrent = id === currentPickerId
+                return (
+                  <div key={id} style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '5px 12px', borderRadius: 20,
+                    background: isCurrent ? PLAYER_COLORS[p.Color] : PLAYER_COLORS[p.Color] + '22',
+                    border: `2px solid ${PLAYER_COLORS[p.Color]}`,
+                    color: isCurrent ? '#fff' : PLAYER_COLORS[p.Color],
+                    fontWeight: isCurrent ? 700 : 400, fontSize: '0.85rem',
+                    opacity: isCurrent ? 1 : 0.5,
+                  }}>
+                    <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>{i + 1}.</span>
+                    {p.Name}
+                    {isCurrent && <span style={{ fontSize: '0.7rem', background: 'rgba(255,255,255,0.3)', borderRadius: 3, padding: '0 4px' }}>🎯</span>}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
 

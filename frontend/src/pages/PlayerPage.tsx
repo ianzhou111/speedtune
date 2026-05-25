@@ -4,7 +4,7 @@ import { startConnection } from '../lib/signalr'
 import type {
   SessionState, Player, CardSummary,
   RoundSongStartPayload, RoundBuzzPayload,
-  RoundAnswerRevealPayload, ScoresUpdatePayload, GameEndedPayload, ErrorPayload,
+  RoundAnswerRevealPayload, ScoresUpdatePayload, GameEndedPayload, ErrorPayload, PickerUpdatePayload,
 } from '../lib/types'
 import { PLAYER_COLORS } from '../lib/types'
 
@@ -42,6 +42,8 @@ export default function PlayerPage() {
   const [timeLeft, setTimeLeft] = useState(0)
   const [clipDuration, setClipDuration] = useState(60)
   const [error, setError] = useState('')
+  const [currentPickerId, setCurrentPickerId] = useState<string | null>(null)
+  const [pickOrder, setPickOrder] = useState<string[]>([])
   const mySocketId = useRef('')
 
   function clearTimer() {
@@ -73,6 +75,8 @@ export default function PlayerPage() {
       conn.on('SessionState', (state: SessionState) => {
         setPlayers(state.Players)
         setCards(state.Cards)
+        setCurrentPickerId(state.CurrentPickerId ?? null)
+        setPickOrder(state.PickOrder ?? [])
         if (state.Status === 'active') {
           setPhase('active')
           if (state.CurrentRound) {
@@ -163,6 +167,11 @@ export default function PlayerPage() {
         setPhase('ended')
       })
 
+      conn.on('PickerUpdate', (p: PickerUpdatePayload) => {
+        setCurrentPickerId(p.CurrentPickerId)
+        setPickOrder(p.PickOrder)
+      })
+
       conn.on('Error', ({ Message, RetryAfter }: ErrorPayload) => {
         setPhase('join')
         if (Message === 'banned') {
@@ -186,7 +195,7 @@ export default function PlayerPage() {
       clearTimer()
       const EVENTS = ['SessionState','LobbyPlayerJoined','LobbyPlayerLeft','LobbyPlayerKicked',
         'GameStarted','RoundSongStart','RoundBuzz','RoundAudioPause','RoundAudioResume',
-        'RoundAnswerReveal','RoundCardComplete','ScoresUpdate','GameEnded','Error']
+        'RoundAnswerReveal','RoundCardComplete','ScoresUpdate','GameEnded','Error','PickerUpdate']
       EVENTS.forEach(e => connRef.current?.off(e))
     }
   }, [])
@@ -381,11 +390,41 @@ export default function PlayerPage() {
               <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{revealInfo.AnimeName}</div>
               {revealInfo.PointsAwarded > 0 && revealInfo.WinnerId && (
                 <div style={{ color: 'var(--green)', fontWeight: 600, marginTop: 4 }}>
-                  +{revealInfo.PointsAwarded} pts → {players.find(p => p.SocketId === revealInfo.WinnerId)?.Name}
+                  +{revealInfo.PointsAwarded}{revealInfo.WinnerId === currentPickerId ? ' 🌟×2' : ''} pts → {players.find(p => p.SocketId === revealInfo.WinnerId)?.Name}
                 </div>
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Picker strip */}
+      {pickOrder.length > 0 && (
+        <div style={{ width: '100%', maxWidth: 600, marginBottom: 4 }}>
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Picking order</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {pickOrder.map((id, i) => {
+              const p = players.find(x => x.SocketId === id)
+              if (!p) return null
+              const isCurrent = id === currentPickerId
+              const isMe = id === myId
+              return (
+                <div key={id} style={{
+                  display: 'flex', alignItems: 'center', gap: 4,
+                  padding: '3px 10px', borderRadius: 20, fontSize: '0.78rem',
+                  background: isCurrent ? PLAYER_COLORS[p.Color] : PLAYER_COLORS[p.Color] + '22',
+                  border: `2px solid ${PLAYER_COLORS[p.Color]}`,
+                  color: isCurrent ? '#fff' : PLAYER_COLORS[p.Color],
+                  fontWeight: isCurrent ? 700 : 400,
+                  opacity: isCurrent ? 1 : 0.5,
+                }}>
+                  <span style={{ opacity: 0.7, fontSize: '0.65rem' }}>{i + 1}.</span>
+                  {p.Name}{isMe ? ' (you)' : ''}
+                  {isCurrent && <span>🎯</span>}
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 

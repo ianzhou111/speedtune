@@ -6,7 +6,7 @@ import { gamesApi, sessionsApi, isAuthenticated } from '../lib/api'
 import type {
   SessionState, Player, CardSummary, Game,
   RoundSongStartPayload, RoundAnswerRevealPayload,
-  RoundAnswerHintPayload, ScoresUpdatePayload, GameEndedPayload,
+  RoundAnswerHintPayload, ScoresUpdatePayload, GameEndedPayload, PickerUpdatePayload,
 } from '../lib/types'
 import { PLAYER_COLORS } from '../lib/types'
 
@@ -40,6 +40,8 @@ export default function HostPage() {
   const [reveal, setReveal] = useState<RoundAnswerRevealPayload | null>(null)
   const [audioPaused, setAudioPaused] = useState(false)
   const [editingScore, setEditingScore] = useState<{ playerId: string; value: string } | null>(null)
+  const [currentPickerId, setCurrentPickerId] = useState<string | null>(null)
+  const [pickOrder, setPickOrder] = useState<string[]>([])
 
   function commitScore(playerId: string, raw: string) {
     const n = parseInt(raw, 10)
@@ -65,6 +67,8 @@ export default function HostPage() {
       if (!state) return
       setPlayers(state.Players ?? [])
       setCards(state.Cards ?? [])
+      setCurrentPickerId(state.CurrentPickerId ?? null)
+      setPickOrder(state.PickOrder ?? [])
       if (state.Status === 'active') {
         setStatus('active')
         if (state.CurrentRound) {
@@ -101,6 +105,10 @@ export default function HostPage() {
     conn.on('ScoresUpdate', ({ Scores }: ScoresUpdatePayload) => setPlayers(Scores))
     conn.on('CardsUpdate', ({ Cards }: { Cards: CardSummary[] }) => setCards(Cards ?? []))
     conn.on('GameEnded', (p: GameEndedPayload) => { setPlayers(p.FinalScores); setStatus('ended') })
+    conn.on('PickerUpdate', (p: PickerUpdatePayload) => {
+      setCurrentPickerId(p.CurrentPickerId)
+      setPickOrder(p.PickOrder)
+    })
 
     // Start and join host group
     conn.start()
@@ -255,45 +263,58 @@ export default function HostPage() {
             </div>
           )}
 
-          {players.map(p => (
-            <div
-              key={p.SocketId}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '6px 8px', borderRadius: 8, background: 'var(--surface)',
-              }}
-            >
-              <div style={{ width: 10, height: 10, borderRadius: '50%', background: PLAYER_COLORS[p.Color], flexShrink: 0 }} />
-              <span style={{ flex: 1, fontSize: '0.9rem', fontWeight: 500 }}>{p.Name}</span>
-              {editingScore?.playerId === p.SocketId ? (
-                <input
-                  type="number"
-                  value={editingScore.value}
-                  onChange={e => setEditingScore({ playerId: p.SocketId, value: e.target.value })}
-                  onBlur={() => commitScore(p.SocketId, editingScore.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') commitScore(p.SocketId, editingScore.value)
-                    if (e.key === 'Escape') setEditingScore(null)
-                  }}
-                  autoFocus
-                  style={{ width: 64, padding: '2px 6px', fontSize: '0.85rem', textAlign: 'right' }}
-                />
-              ) : (
-                <span
-                  onClick={() => setEditingScore({ playerId: p.SocketId, value: String(p.Score) })}
-                  title="Click to edit score"
-                  style={{ fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer', borderBottom: '1px dashed var(--border)', paddingBottom: 1 }}
-                >{p.Score}</span>
-              )}
-              {status === 'lobby' && (
-                <button
-                  style={{ background: 'none', color: 'var(--red)', padding: '2px 4px', fontSize: '0.8rem' }}
-                  onClick={() => invoke('HostKickPlayer', p.SocketId)}
-                  title="Kick"
-                >✕</button>
-              )}
-            </div>
-          ))}
+          {players.map(p => {
+            const isPicker = p.SocketId === currentPickerId
+            return (
+              <div
+                key={p.SocketId}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '6px 8px', borderRadius: 8,
+                  background: isPicker ? PLAYER_COLORS[p.Color] + '22' : 'var(--surface)',
+                  border: isPicker ? `1px solid ${PLAYER_COLORS[p.Color]}` : '1px solid transparent',
+                }}
+              >
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: PLAYER_COLORS[p.Color], flexShrink: 0 }} />
+                <span style={{ flex: 1, fontSize: '0.9rem', fontWeight: 500 }}>{p.Name}</span>
+                {isPicker && <span title="Current picker — gets 2x" style={{ fontSize: '0.7rem', background: 'var(--yellow)', color: '#000', borderRadius: 4, padding: '1px 4px', fontWeight: 700 }}>2×</span>}
+                {editingScore?.playerId === p.SocketId ? (
+                  <input
+                    type="number"
+                    value={editingScore.value}
+                    onChange={e => setEditingScore({ playerId: p.SocketId, value: e.target.value })}
+                    onBlur={() => commitScore(p.SocketId, editingScore.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') commitScore(p.SocketId, editingScore.value)
+                      if (e.key === 'Escape') setEditingScore(null)
+                    }}
+                    autoFocus
+                    style={{ width: 64, padding: '2px 6px', fontSize: '0.85rem', textAlign: 'right' }}
+                  />
+                ) : (
+                  <span
+                    onClick={() => setEditingScore({ playerId: p.SocketId, value: String(p.Score) })}
+                    title="Click to edit score"
+                    style={{ fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer', borderBottom: '1px dashed var(--border)', paddingBottom: 1 }}
+                  >{p.Score}</span>
+                )}
+                {status === 'active' && !isPicker && (
+                  <button
+                    style={{ background: 'none', color: 'var(--text-muted)', padding: '2px 4px', fontSize: '0.75rem' }}
+                    onClick={() => invoke('HostSetPicker', p.SocketId)}
+                    title="Set as current picker"
+                  >📍</button>
+                )}
+                {status === 'lobby' && (
+                  <button
+                    style={{ background: 'none', color: 'var(--red)', padding: '2px 4px', fontSize: '0.8rem' }}
+                    onClick={() => invoke('HostKickPlayer', p.SocketId)}
+                    title="Kick"
+                  >✕</button>
+                )}
+              </div>
+            )
+          })}
 
           {status === 'lobby' && (
             <button
@@ -304,6 +325,25 @@ export default function HostPage() {
             >
               ▶ Start Game
             </button>
+          )}
+
+          {status === 'active' && pickOrder.length > 0 && (
+            <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Pick Order</div>
+              {pickOrder.map((id, i) => {
+                const p = players.find(x => x.SocketId === id)
+                if (!p) return null
+                const isCurrent = id === currentPickerId
+                return (
+                  <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, opacity: isCurrent ? 1 : 0.5 }}>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', width: 14 }}>{i + 1}.</span>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: PLAYER_COLORS[p.Color], flexShrink: 0 }} />
+                    <span style={{ flex: 1, fontSize: '0.8rem', fontWeight: isCurrent ? 700 : 400, color: isCurrent ? PLAYER_COLORS[p.Color] : 'var(--text)' }}>{p.Name}</span>
+                    {isCurrent && <span style={{ fontSize: '0.65rem', background: 'var(--yellow)', color: '#000', borderRadius: 3, padding: '1px 3px', fontWeight: 700 }}>NOW</span>}
+                  </div>
+                )
+              })}
+            </div>
           )}
 
           {status === 'active' && (
@@ -391,7 +431,7 @@ export default function HostPage() {
                     <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{reveal.SongArtist}</div>
                     {reveal.PointsAwarded > 0 && (
                       <div style={{ color: 'var(--green)', marginTop: 6, fontWeight: 600 }}>
-                        +{reveal.PointsAwarded} → {players.find(p => p.SocketId === reveal.WinnerId)?.Name}
+                        +{reveal.PointsAwarded}{reveal.WinnerId === currentPickerId ? ' 🌟×2' : ''} → {players.find(p => p.SocketId === reveal.WinnerId)?.Name}
                       </div>
                     )}
                   </div>
