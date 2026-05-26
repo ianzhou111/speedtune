@@ -143,6 +143,14 @@ export default function AdminGameEditor() {
     setGame(updated)
   }
 
+  function clearSongs(cardId: string) {
+    if (!game) return
+    const card = game.Cards.find(c => c.Id === cardId)
+    if (!card || card.Songs.length === 0) return
+    if (!confirm(`Remove all ${card.Songs.length} song${card.Songs.length !== 1 ? 's' : ''} from "${card.Label}"? The card itself will be kept.`)) return
+    updateCard(cardId, { Songs: [] })
+  }
+
   function removeSong(cardId: string, songIdx: number) {
     if (!game) return
     const updated = {
@@ -422,6 +430,15 @@ export default function AdminGameEditor() {
               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', flexShrink: 0 }}>
                 {card.Songs.length} song{card.Songs.length !== 1 ? 's' : ''}
               </span>
+              {card.Songs.length > 0 && (
+                <button
+                  style={{ background: 'none', color: 'var(--text-muted)', padding: '4px 8px', fontSize: '0.75rem', border: '1px solid var(--border)', borderRadius: 6, flexShrink: 0 }}
+                  onClick={() => clearSongs(card.Id)}
+                  title="Remove all songs from this card"
+                >
+                  Clear songs
+                </button>
+              )}
               <button
                 className="btn-danger"
                 style={{ padding: '6px 12px' }}
