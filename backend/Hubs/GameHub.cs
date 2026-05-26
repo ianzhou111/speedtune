@@ -5,147 +5,187 @@ using SpeedTune.Api.Services;
 
 namespace SpeedTune.Api.Hubs;
 
-public class GameHub(GameEngineService engine, MongoDbService db) : Hub
+public class GameHub(GameEngineService engine, MongoDbService db, RoomTracker tracker) : Hub
 {
     // ── helpers ────────────────────────────────────────────────────────────
 
-    private bool IsHost() => Context.User?.Identity?.IsAuthenticated == true;
+    private string? SessionId => tracker.GetSessionId(Context.ConnectionId);
+    private bool IsHost => tracker.IsHostConnection(Context.ConnectionId);
 
     // ── player ─────────────────────────────────────────────────────────────
 
     /// <summary>
     /// Called by each player browser on page load.
-    /// Adds connection to the "players" group and upserts them into the session.
+    /// Finds the session by room code, adds to player + room groups.
     /// </summary>
-    public async Task PlayerJoin(string name, string color)
+    public async Task PlayerJoin(string name, string color, string roomCode)
     {
-        await Groups.AddToGroupAsync(Context.ConnectionId, "players");
-        await engine.PlayerJoin(Context.ConnectionId, name, color);
+        var session = await db.Sessions
+            .Find(s => s.RoomCode == roomCode && (s.Status == "lobby" || s.Status == "active"))
+            .FirstOrDefaultAsync();
+
+        if (session is null)
+        {
+            await Clients.Caller.SendAsync("Error", new { Message = "Room not found" });
+            return;
+        }
+
+        await Groups.AddToGroupAsync(Context.ConnectionId, $"players-{session.Id}");
+        await Groups.AddToGroupAsync(Context.ConnectionId, $"room-{session.Id}");
+        tracker.Track(Context.ConnectionId, session.Id, isHost: false);
+
+        await engine.PlayerJoin(Context.ConnectionId, name, color, session.Id);
     }
 
     // ── display screen ─────────────────────────────────────────────────────
 
     /// <summary>
-    /// Called by the public display screen. No auth required.
-    /// Adds to "display" group and sends current state snapshot.
+    /// Called by the public display screen. Finds session by room code.
     /// </summary>
-    public async Task DisplayJoin()
+    public async Task DisplayJoin(string roomCode)
     {
-        await Groups.AddToGroupAsync(Context.ConnectionId, "display");
-        await SendCallerState();
+        var session = await db.Sessions
+            .Find(s => s.RoomCode == roomCode && (s.Status == "lobby" || s.Status == "active"))
+            .FirstOrDefaultAsync();
+
+        if (session is null)
+        {
+            await Clients.Caller.SendAsync("Error", new { Message = "Room not found" });
+            return;
+        }
+
+        await Groups.AddToGroupAsync(Context.ConnectionId, $"display-{session.Id}");
+        await Groups.AddToGroupAsync(Context.ConnectionId, $"room-{session.Id}");
+        tracker.Track(Context.ConnectionId, session.Id, isHost: false);
+
+        await SendCallerState(session.Id);
     }
 
     // ── host ────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Called by the host control panel after login.
-    /// Requires a valid JWT (passed as ?access_token= query param).
+    /// Called by the host control panel with a session-specific host token.
+    /// No JWT required — token validates authority over the specific session.
     /// </summary>
-    public async Task HostJoin()
+    public async Task HostJoin(string sessionId, string hostToken)
     {
-        if (!IsHost())
+        var session = await db.Sessions.Find(s => s.Id == sessionId).FirstOrDefaultAsync();
+
+        if (session is null || session.HostToken != hostToken)
         {
             await Clients.Caller.SendAsync("Error", new { Message = "Unauthorized" });
             return;
         }
-        await Groups.AddToGroupAsync(Context.ConnectionId, "host");
-        await SendCallerState();
+
+        await Groups.AddToGroupAsync(Context.ConnectionId, $"host-{session.Id}");
+        await Groups.AddToGroupAsync(Context.ConnectionId, $"room-{session.Id}");
+        tracker.Track(Context.ConnectionId, session.Id, isHost: true);
+
+        await SendCallerState(session.Id);
     }
 
     public async Task HostStartGame()
     {
-        if (!IsHost()) return;
-        await engine.StartGame();
+        if (!IsHost || SessionId is null) return;
+        await engine.StartGame(SessionId);
     }
 
     public async Task HostOpenCard(string cardId)
     {
-        if (!IsHost()) return;
-        await engine.OpenCard(cardId);
+        if (!IsHost || SessionId is null) return;
+        await engine.OpenCard(SessionId, cardId);
     }
 
     public async Task HostJudge(bool correct)
     {
-        if (!IsHost()) return;
-        await engine.Judge(correct);
+        if (!IsHost || SessionId is null) return;
+        await engine.Judge(SessionId, correct);
     }
 
     public async Task HostSkip()
     {
-        if (!IsHost()) return;
-        await engine.Skip();
+        if (!IsHost || SessionId is null) return;
+        await engine.Skip(SessionId);
     }
 
     public async Task HostNextSong()
     {
-        if (!IsHost()) return;
-        await engine.NextSong();
+        if (!IsHost || SessionId is null) return;
+        await engine.NextSong(SessionId);
     }
 
     public async Task HostPauseAudio()
     {
-        if (!IsHost()) return;
-        await Clients.Group("display").SendAsync("RoundAudioPause");
+        if (!IsHost || SessionId is null) return;
+        await Clients.Group($"display-{SessionId}").SendAsync("RoundAudioPause");
     }
 
     public async Task HostResumeAudio()
     {
-        if (!IsHost()) return;
-        await Clients.Group("display").SendAsync("RoundAudioPlay");
+        if (!IsHost || SessionId is null) return;
+        await Clients.Group($"display-{SessionId}").SendAsync("RoundAudioPlay");
     }
 
     public async Task HostKickPlayer(string playerId)
     {
-        if (!IsHost()) return;
-        await engine.KickPlayer(playerId);
+        if (!IsHost || SessionId is null) return;
+        await engine.KickPlayer(SessionId, playerId);
     }
 
     public async Task HostEndGame()
     {
-        if (!IsHost()) return;
-        await engine.EndGame();
+        if (!IsHost || SessionId is null) return;
+        await engine.EndGame(SessionId);
     }
 
     public async Task HostSetScore(string playerId, int score)
     {
-        if (!IsHost()) return;
-        await engine.SetScore(playerId, score);
+        if (!IsHost || SessionId is null) return;
+        await engine.SetScore(SessionId, playerId, score);
     }
 
     public async Task HostTimeUp()
     {
-        if (!IsHost()) return;
-        await engine.TimeUp();
+        if (!IsHost || SessionId is null) return;
+        await engine.TimeUp(SessionId);
     }
 
     public async Task HostSetPicker(string playerId)
     {
-        if (!IsHost()) return;
-        await engine.SetPicker(playerId);
+        if (!IsHost || SessionId is null) return;
+        await engine.SetPicker(SessionId, playerId);
     }
 
     // ── player buzzer ───────────────────────────────────────────────────────
 
-    public async Task PlayerBuzz() => await engine.Buzz(Context.ConnectionId);
+    public async Task PlayerBuzz()
+    {
+        if (SessionId is not null)
+            await engine.Buzz(Context.ConnectionId, SessionId);
+    }
 
-    public async Task PlayerLeave() => await engine.PlayerDisconnect(Context.ConnectionId);
+    public async Task PlayerLeave()
+    {
+        if (SessionId is not null)
+            await engine.PlayerDisconnect(Context.ConnectionId, SessionId);
+    }
 
     // ── lifecycle ───────────────────────────────────────────────────────────
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        await engine.PlayerDisconnect(Context.ConnectionId);
+        var sessionId = SessionId;
+        if (sessionId is not null && !IsHost)
+            await engine.PlayerDisconnect(Context.ConnectionId, sessionId);
+        tracker.Remove(Context.ConnectionId);
         await base.OnDisconnectedAsync(exception);
     }
 
     // ── private ─────────────────────────────────────────────────────────────
 
-    private async Task SendCallerState()
+    private async Task SendCallerState(string sessionId)
     {
-        var session = await db.Sessions
-            .Find(s => s.Status == "lobby" || s.Status == "active")
-            .SortByDescending(s => s.CreatedAt)
-            .FirstOrDefaultAsync();
+        var session = await db.Sessions.Find(s => s.Id == sessionId).FirstOrDefaultAsync();
 
         Game? game = null;
         if (session?.GameId is not null)

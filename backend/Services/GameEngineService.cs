@@ -7,13 +7,16 @@ namespace SpeedTune.Api.Services;
 
 public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
 {
-    // ── helpers ────────────────────────────────────────────────────────────
+    // ── group name helpers ─────────────────────────────────────────────────
+    private static string Room(string sid)    => $"room-{sid}";
+    private static string Players(string sid) => $"players-{sid}";
+    private static string Host(string sid)    => $"host-{sid}";
+    private static string Display(string sid) => $"display-{sid}";
 
-    private async Task<Session?> GetActiveSession() =>
-        await db.Sessions
-            .Find(s => s.Status == "lobby" || s.Status == "active")
-            .SortByDescending(s => s.CreatedAt)
-            .FirstOrDefaultAsync();
+    // ── db helpers ─────────────────────────────────────────────────────────
+
+    private async Task<Session?> GetSession(string sessionId) =>
+        await db.Sessions.Find(s => s.Id == sessionId).FirstOrDefaultAsync();
 
     private async Task<Game?> GetGame(string gameId) =>
         await db.Games.Find(g => g.Id == gameId).FirstOrDefaultAsync();
@@ -26,9 +29,9 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
 
     // ── player join ────────────────────────────────────────────────────────
 
-    public async Task PlayerJoin(string socketId, string name, string color)
+    public async Task PlayerJoin(string socketId, string name, string color, string sessionId)
     {
-        var session = await GetActiveSession();
+        var session = await GetSession(sessionId);
         if (session is null) return;
 
         // Player with same name but different socket = browser refresh / reconnect
@@ -82,37 +85,37 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         // Tell everyone the old socket is gone before announcing the new one
         if (oldSocketId is not null)
         {
-            await hub.Clients.All.SendAsync("LobbyPlayerLeft", new { PlayerId = oldSocketId });
+            await hub.Clients.Group(Room(sessionId)).SendAsync("LobbyPlayerLeft", new { PlayerId = oldSocketId });
             if (session.PickOrder.Count > 0)
-                await hub.Clients.All.SendAsync("PickerUpdate", BuildPickerDto(session));
+                await hub.Clients.Group(Room(sessionId)).SendAsync("PickerUpdate", BuildPickerDto(session));
         }
 
         var game = await GetGame(session.GameId);
         await hub.Clients.Client(socketId).SendAsync("SessionState", BuildPublicState(session, game));
         var rejoined = session.Players.First(p => p.SocketId == socketId);
-        await hub.Clients.All.SendAsync("LobbyPlayerJoined", new { Player = BuildPlayerDto(rejoined) });
+        await hub.Clients.Group(Room(sessionId)).SendAsync("LobbyPlayerJoined", new { Player = BuildPlayerDto(rejoined) });
     }
 
     // ── start game ─────────────────────────────────────────────────────────
 
-    public async Task StartGame()
+    public async Task StartGame(string sessionId)
     {
-        var session = await GetActiveSession();
+        var session = await GetSession(sessionId);
         if (session is null || session.Status != "lobby") return;
 
         session.Status = "active";
         session.PickOrder = session.Players.OrderBy(_ => Random.Shared.Next()).Select(p => p.SocketId).ToList();
         session.CurrentPickerIndex = 0;
         await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
-        await hub.Clients.All.SendAsync("GameStarted");
-        await hub.Clients.All.SendAsync("PickerUpdate", BuildPickerDto(session));
+        await hub.Clients.Group(Room(sessionId)).SendAsync("GameStarted");
+        await hub.Clients.Group(Room(sessionId)).SendAsync("PickerUpdate", BuildPickerDto(session));
     }
 
     // ── open card ──────────────────────────────────────────────────────────
 
-    public async Task OpenCard(string cardId)
+    public async Task OpenCard(string sessionId, string cardId)
     {
-        var session = await GetActiveSession();
+        var session = await GetSession(sessionId);
         if (session is null || session.Status != "active") return;
 
         var game = await GetGame(session.GameId);
@@ -140,19 +143,19 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         var startPct = CalcStartPercent(song);
 
         // Display gets video URL + start position; others get start position only
-        await hub.Clients.Group("display").SendAsync("RoundSongStart", new
+        await hub.Clients.Group(Display(sessionId)).SendAsync("RoundSongStart", new
         {
             CardId = cardId, CardLabel = card.Label, Stars = card.Stars,
             SongIndex = songIndex, TotalSongs = card.Songs.Count, VideoUrl = song.VideoUrl,
-            ClipDuration = game.Settings.ClipDuration, StartPercent = startPct
+            ClipDuration = game!.Settings.ClipDuration, StartPercent = startPct
         });
-        await hub.Clients.Group("players").SendAsync("RoundSongStart", new
+        await hub.Clients.Group(Players(sessionId)).SendAsync("RoundSongStart", new
         {
             CardId = cardId, CardLabel = card.Label, Stars = card.Stars,
             SongIndex = songIndex, TotalSongs = card.Songs.Count, VideoUrl = "",
             ClipDuration = game.Settings.ClipDuration, StartPercent = startPct
         });
-        await hub.Clients.Group("host").SendAsync("RoundSongStart", new
+        await hub.Clients.Group(Host(sessionId)).SendAsync("RoundSongStart", new
         {
             CardId = cardId, CardLabel = card.Label, Stars = card.Stars,
             SongIndex = songIndex, TotalSongs = card.Songs.Count, VideoUrl = "",
@@ -160,28 +163,30 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         });
 
         // Answer hint only to host
-        await hub.Clients.Group("host").SendAsync("RoundAnswerHint", new
+        await hub.Clients.Group(Host(sessionId)).SendAsync("RoundAnswerHint", new
         {
             song.AnimeName, song.SongName, song.SongArtist
         });
     }
 
-    // ── buzz ───────────────────────────────────────────────────────────────
+    // ── time up ────────────────────────────────────────────────────────────
 
-    public async Task TimeUp()
+    public async Task TimeUp(string sessionId)
     {
-        var session = await GetActiveSession();
+        var session = await GetSession(sessionId);
         if (session?.CurrentRound is null || session.CurrentRound.Phase != "guess") return;
         if (session.CurrentRound.IsTimedOut) return;
 
         session.CurrentRound.IsTimedOut = true;
         await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
-        await hub.Clients.All.SendAsync("RoundTimedOut");
+        await hub.Clients.Group(Room(sessionId)).SendAsync("RoundTimedOut");
     }
 
-    public async Task Buzz(string socketId)
+    // ── buzz ───────────────────────────────────────────────────────────────
+
+    public async Task Buzz(string socketId, string sessionId)
     {
-        var session = await GetActiveSession();
+        var session = await GetSession(sessionId);
         if (session?.CurrentRound is null || session.CurrentRound.Phase != "guess") return;
         if (session.CurrentRound.IsTimedOut) return;
 
@@ -193,18 +198,18 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         session.CurrentRound.BuzzedPlayerId = socketId;
         await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
 
-        await hub.Clients.All.SendAsync("RoundBuzz", new
+        await hub.Clients.Group(Room(sessionId)).SendAsync("RoundBuzz", new
         {
             Player = new { player.SocketId, player.Name, player.Color }
         });
-        await hub.Clients.Group("display").SendAsync("RoundAudioPause");
+        await hub.Clients.Group(Display(sessionId)).SendAsync("RoundAudioPause");
     }
 
     // ── judge ──────────────────────────────────────────────────────────────
 
-    public async Task Judge(bool correct)
+    public async Task Judge(string sessionId, bool correct)
     {
-        var session = await GetActiveSession();
+        var session = await GetSession(sessionId);
         if (session?.CurrentRound is null) return;
 
         var game = await GetGame(session.GameId);
@@ -223,7 +228,7 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
                 : pointValue;
             if (winner is not null) winner.Score += effectivePoints;
             await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
-            await RevealAndAdvance(session, game, card, song, effectivePoints, round.BuzzedPlayerId);
+            await RevealAndAdvance(session, game, card, song, effectivePoints, round.BuzzedPlayerId, sessionId);
         }
         else
         {
@@ -240,33 +245,33 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
 
             await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
 
-            await hub.Clients.All.SendAsync("ScoresUpdate", BuildScores(session.Players));
-            await hub.Clients.All.SendAsync("RoundAudioResume");
+            await hub.Clients.Group(Room(sessionId)).SendAsync("ScoresUpdate", BuildScores(session.Players));
+            await hub.Clients.Group(Room(sessionId)).SendAsync("RoundAudioResume");
 
             // All players exhausted — let audience try; host reveals when ready
             if (allExhausted)
-                await hub.Clients.All.SendAsync("RoundTimedOut");
+                await hub.Clients.Group(Room(sessionId)).SendAsync("RoundTimedOut");
         }
     }
 
     // ── skip ───────────────────────────────────────────────────────────────
 
-    public async Task Skip()
+    public async Task Skip(string sessionId)
     {
-        var session = await GetActiveSession();
+        var session = await GetSession(sessionId);
         if (session?.CurrentRound is null) return;
         var game = await GetGame(session.GameId);
         var card = game?.Cards.FirstOrDefault(c => c.Id == session.CurrentRound.CardId);
         if (card is null) return;
         var song = card.Songs[session.CurrentRound.SongIndex];
-        await RevealAndAdvance(session, game!, card, song, 0, null);
+        await RevealAndAdvance(session, game!, card, song, 0, null, sessionId);
     }
 
     // ── kick player ────────────────────────────────────────────────────────
 
-    public async Task KickPlayer(string playerId)
+    public async Task KickPlayer(string sessionId, string playerId)
     {
-        var session = await GetActiveSession();
+        var session = await GetSession(sessionId);
         if (session is null) return;
 
         var player = session.Players.FirstOrDefault(p => p.SocketId == playerId);
@@ -276,27 +281,27 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
 
         await hub.Clients.Client(playerId).SendAsync("LobbyPlayerKicked");
-        await hub.Clients.All.SendAsync("LobbyPlayerLeft", new { PlayerId = playerId });
+        await hub.Clients.Group(Room(sessionId)).SendAsync("LobbyPlayerLeft", new { PlayerId = playerId });
     }
 
     // ── set picker (host manual override) ─────────────────────────────────
 
-    public async Task SetPicker(string playerId)
+    public async Task SetPicker(string sessionId, string playerId)
     {
-        var session = await GetActiveSession();
+        var session = await GetSession(sessionId);
         if (session is null) return;
         var idx = session.PickOrder.IndexOf(playerId);
         if (idx == -1) return;
         session.CurrentPickerIndex = idx;
         await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
-        await hub.Clients.All.SendAsync("PickerUpdate", BuildPickerDto(session));
+        await hub.Clients.Group(Room(sessionId)).SendAsync("PickerUpdate", BuildPickerDto(session));
     }
 
     // ── set score (host manual override) ──────────────────────────────────
 
-    public async Task SetScore(string playerId, int score)
+    public async Task SetScore(string sessionId, string playerId, int score)
     {
-        var session = await GetActiveSession();
+        var session = await GetSession(sessionId);
         if (session is null) return;
 
         var player = session.Players.FirstOrDefault(p => p.SocketId == playerId);
@@ -304,21 +309,21 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
 
         player.Score = score;
         await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
-        await hub.Clients.All.SendAsync("ScoresUpdate", BuildScores(session.Players));
+        await hub.Clients.Group(Room(sessionId)).SendAsync("ScoresUpdate", BuildScores(session.Players));
     }
 
     // ── end game ───────────────────────────────────────────────────────────
 
-    public async Task EndGame()
+    public async Task EndGame(string sessionId)
     {
-        var session = await GetActiveSession();
+        var session = await GetSession(sessionId);
         if (session is null) return;
 
         session.Status = "ended";
         session.CurrentRound = null;
         await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
 
-        await hub.Clients.All.SendAsync("GameEnded", new
+        await hub.Clients.Group(Room(sessionId)).SendAsync("GameEnded", new
         {
             FinalScores = session.Players.Select(BuildPlayerDto)
         });
@@ -326,9 +331,9 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
 
     // ── player disconnect ──────────────────────────────────────────────────
 
-    public async Task PlayerDisconnect(string socketId)
+    public async Task PlayerDisconnect(string socketId, string sessionId)
     {
-        var session = await GetActiveSession();
+        var session = await GetSession(sessionId);
         if (session is null) return;
 
         var player = session.Players.FirstOrDefault(p => p.SocketId == socketId);
@@ -336,34 +341,34 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
 
         session.Players.Remove(player);
         await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
-        await hub.Clients.All.SendAsync("LobbyPlayerLeft", new { PlayerId = socketId });
+        await hub.Clients.Group(Room(sessionId)).SendAsync("LobbyPlayerLeft", new { PlayerId = socketId });
     }
 
     // ── reveal (no auto-advance — host calls NextSong when ready) ─────────────
 
-    private async Task RevealAndAdvance(Session session, Game game, Card card, SongEntry song, int points, string? winnerId)
+    private async Task RevealAndAdvance(Session session, Game game, Card card, SongEntry song, int points, string? winnerId, string sessionId)
     {
         var round = session.CurrentRound!;
         round.Phase = "reveal";
         session.PlayedSongs.Add(new PlayedSong { CardId = round.CardId, SongIndex = round.SongIndex });
         await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
 
-        await hub.Clients.All.SendAsync("RoundAnswerReveal", new
+        await hub.Clients.Group(Room(sessionId)).SendAsync("RoundAnswerReveal", new
         {
             song.AnimeName, song.SongName, song.SongArtist,
             PointsAwarded = points, WinnerId = winnerId,
             VideoUrl = song.VideoUrl
         });
-        await hub.Clients.All.SendAsync("ScoresUpdate", BuildScores(session.Players));
-        await hub.Clients.All.SendAsync("CardsUpdate", new { Cards = BuildCardSummaries(session, game) });
+        await hub.Clients.Group(Room(sessionId)).SendAsync("ScoresUpdate", BuildScores(session.Players));
+        await hub.Clients.Group(Room(sessionId)).SendAsync("CardsUpdate", new { Cards = BuildCardSummaries(session, game) });
         // Host clicks "Next Song" to advance — see NextSong() below.
     }
 
     // ── next song (host-triggered after reveal) ────────────────────────────
 
-    public async Task NextSong()
+    public async Task NextSong(string sessionId)
     {
-        var session = await GetActiveSession();
+        var session = await GetSession(sessionId);
         if (session?.CurrentRound is null || session.CurrentRound.Phase != "reveal") return;
 
         var game = await GetGame(session.GameId);
@@ -392,25 +397,25 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
 
             var nextSong = card.Songs[nextIndex.Value];
             var nextStartPct = CalcStartPercent(nextSong);
-            await hub.Clients.Group("display").SendAsync("RoundSongStart", new
+            await hub.Clients.Group(Display(sessionId)).SendAsync("RoundSongStart", new
             {
                 CardId = round.CardId, CardLabel = card.Label, Stars = card.Stars,
                 SongIndex = nextIndex.Value, TotalSongs = card.Songs.Count, VideoUrl = nextSong.VideoUrl,
                 ClipDuration = game!.Settings.ClipDuration, StartPercent = nextStartPct
             });
-            await hub.Clients.Group("players").SendAsync("RoundSongStart", new
+            await hub.Clients.Group(Players(sessionId)).SendAsync("RoundSongStart", new
             {
                 CardId = round.CardId, CardLabel = card.Label, Stars = card.Stars,
                 SongIndex = nextIndex.Value, TotalSongs = card.Songs.Count, VideoUrl = "",
-                ClipDuration = game!.Settings.ClipDuration, StartPercent = nextStartPct
+                ClipDuration = game.Settings.ClipDuration, StartPercent = nextStartPct
             });
-            await hub.Clients.Group("host").SendAsync("RoundSongStart", new
+            await hub.Clients.Group(Host(sessionId)).SendAsync("RoundSongStart", new
             {
                 CardId = round.CardId, CardLabel = card.Label, Stars = card.Stars,
                 SongIndex = nextIndex.Value, TotalSongs = card.Songs.Count, VideoUrl = "",
-                ClipDuration = game!.Settings.ClipDuration, StartPercent = nextStartPct
+                ClipDuration = game.Settings.ClipDuration, StartPercent = nextStartPct
             });
-            await hub.Clients.Group("host").SendAsync("RoundAnswerHint", new
+            await hub.Clients.Group(Host(sessionId)).SendAsync("RoundAnswerHint", new
             {
                 nextSong.AnimeName, nextSong.SongName, nextSong.SongArtist
             });
@@ -421,8 +426,8 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
             if (session.PickOrder.Count > 0)
                 session.CurrentPickerIndex = (session.CurrentPickerIndex + 1) % session.PickOrder.Count;
             await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
-            await hub.Clients.All.SendAsync("RoundCardComplete");
-            await hub.Clients.All.SendAsync("PickerUpdate", BuildPickerDto(session));
+            await hub.Clients.Group(Room(sessionId)).SendAsync("RoundCardComplete");
+            await hub.Clients.Group(Room(sessionId)).SendAsync("PickerUpdate", BuildPickerDto(session));
         }
     }
 

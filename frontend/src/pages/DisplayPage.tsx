@@ -12,11 +12,17 @@ interface RevealInfo {
   PointsAwarded: number; WinnerId: string | null; VideoUrl: string
 }
 
+/** Get `?room=` from the URL (uppercase, trimmed). */
+function getRoomFromUrl(): string {
+  return new URLSearchParams(window.location.search).get('room')?.toUpperCase().trim() ?? ''
+}
+
 export default function DisplayPage() {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const connRef = useRef<signalR.HubConnection | null>(null)
+  const connRef  = useRef<signalR.HubConnection | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const startPercentRef = useRef(0)
+  const [roomCode] = useState(getRoomFromUrl)
 
   const [audioUnlocked, setAudioUnlocked] = useState(false)
   const [status, setStatus] = useState<'lobby' | 'active' | 'ended'>('lobby')
@@ -130,7 +136,7 @@ export default function DisplayPage() {
       conn.on('GameStarted', () => {
         setStatus('active')
         _setRoundPhase('idle')
-        conn.invoke('DisplayJoin').catch(() => {})
+        conn.invoke('DisplayJoin', roomCode).catch(() => {})
       })
 
       conn.on('RoundSongStart', (p: RoundSongStartPayload) => {
@@ -239,7 +245,7 @@ export default function DisplayPage() {
         setVideoVisible(false)
         clearTimer()
         if (videoRef.current) { videoRef.current.pause(); videoRef.current.src = '' }
-        conn.invoke('DisplayJoin').catch(() => {})
+        conn.invoke('DisplayJoin', roomCode).catch(() => {})
       })
 
       conn.on('ScoresUpdate', ({ Scores }: ScoresUpdatePayload) => setPlayers(Scores ?? []))
@@ -257,7 +263,7 @@ export default function DisplayPage() {
         if (videoRef.current) { videoRef.current.pause(); videoRef.current.src = '' }
       })
 
-      conn.invoke('DisplayJoin').catch(() => {})
+      conn.invoke('DisplayJoin', roomCode).catch(() => {})
     })
 
     return () => {
@@ -283,6 +289,20 @@ export default function DisplayPage() {
   // timer color: green → yellow → red
   const timerPct = clipDuration > 0 ? timeLeft / clipDuration : 0
   const timerColor = timerPct > 0.5 ? 'var(--green)' : timerPct > 0.25 ? 'var(--yellow)' : 'var(--red)'
+
+  // ── NO ROOM CODE screen ──────────────────────────────────────────────────
+  if (!roomCode) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', gap: 16 }}>
+        <video ref={videoRef} style={{ display: 'none' }} />
+        <div style={{ fontSize: '3rem' }}>📺</div>
+        <h1 style={{ fontSize: '2rem', marginBottom: 4 }}>Display Screen</h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: '1rem' }}>
+          Open this page with a room code: <code style={{ background: 'var(--surface2)', padding: '2px 8px', borderRadius: 4 }}>/display?room=XXXXXX</code>
+        </p>
+      </div>
+    )
+  }
 
   // ── AUDIO UNLOCK overlay ─────────────────────────────────────────────────
   if (!audioUnlocked) {

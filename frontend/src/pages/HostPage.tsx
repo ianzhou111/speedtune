@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import * as signalR from '@microsoft/signalr'
-import { getToken } from '../lib/api'
-import { gamesApi, sessionsApi, isAuthenticated } from '../lib/api'
+import { gamesApi, sessionsApi } from '../lib/api'
 import type {
   SessionState, Player, CardSummary, Game,
   RoundSongStartPayload, RoundAnswerRevealPayload,
@@ -10,43 +9,48 @@ import type {
 } from '../lib/types'
 import { PLAYER_COLORS } from '../lib/types'
 
+// ── sessionStorage keys ───────────────────────────────────────────────────────
+const SS_SESSION_ID  = 'st_host_sessionId'
+const SS_HOST_TOKEN  = 'st_host_token'
+const SS_ROOM_CODE   = 'st_host_roomCode'
+
 interface AnswerHint { AnimeName: string; SongName: string; SongArtist: string }
 
 export default function HostPage() {
-  const navigate = useNavigate()
-  const connRef = useRef<signalR.HubConnection | null>(null)
-
-  // Auth
-  useEffect(() => {
-    if (!isAuthenticated()) navigate('/login')
-  }, [navigate])
+  const connRef      = useRef<signalR.HubConnection | null>(null)
+  // Keep credentials in refs so SignalR callbacks always have the latest value
+  const sessionIdRef = useRef(sessionStorage.getItem(SS_SESSION_ID) ?? '')
+  const hostTokenRef = useRef(sessionStorage.getItem(SS_HOST_TOKEN) ?? '')
 
   // Session setup
-  const [games, setGames] = useState<Game[]>([])
+  const [games, setGames]                   = useState<Game[]>([])
   const [selectedGameId, setSelectedGameId] = useState('')
   const [creatingSession, setCreatingSession] = useState(false)
-  const [sessionError, setSessionError] = useState('')
+  const [sessionError, setSessionError]     = useState('')
+  const [roomCode, setRoomCode]             = useState(sessionStorage.getItem(SS_ROOM_CODE) ?? '')
 
   // Game state
   const [status, setStatus] = useState<'no-session' | 'lobby' | 'active' | 'ended'>('no-session')
-  const [players, setPlayers] = useState<Player[]>([])
-  const [cards, setCards] = useState<CardSummary[]>([])
-  const [currentCardId, setCurrentCardId] = useState<string | null>(null)
-  const [songIndex, setSongIndex] = useState(0)
-  const [totalSongs, setTotalSongs] = useState(0)
-  const [roundPhase, setRoundPhase] = useState<'idle' | 'guess' | 'buzzed' | 'reveal'>('idle')
-  const [buzzedPlayer, setBuzzedPlayer] = useState<Player | null>(null)
-  const [answerHint, setAnswerHint] = useState<AnswerHint | null>(null)
-  const [reveal, setReveal] = useState<RoundAnswerRevealPayload | null>(null)
-  const [audioPaused, setAudioPaused] = useState(false)
-  const [editingScore, setEditingScore] = useState<{ playerId: string; value: string } | null>(null)
-  const [currentPickerId, setCurrentPickerId] = useState<string | null>(null)
-  const [pickOrder, setPickOrder] = useState<string[]>([])
-  const [timedOut, setTimedOut] = useState(false)
-  const [timeLeft, setTimeLeft] = useState(0)
+  const [players, setPlayers]                   = useState<Player[]>([])
+  const [cards, setCards]                       = useState<CardSummary[]>([])
+  const [currentCardId, setCurrentCardId]       = useState<string | null>(null)
+  const [songIndex, setSongIndex]               = useState(0)
+  const [totalSongs, setTotalSongs]             = useState(0)
+  const [roundPhase, setRoundPhase]             = useState<'idle' | 'guess' | 'buzzed' | 'reveal'>('idle')
+  const [buzzedPlayer, setBuzzedPlayer]         = useState<Player | null>(null)
+  const [answerHint, setAnswerHint]             = useState<AnswerHint | null>(null)
+  const [reveal, setReveal]                     = useState<RoundAnswerRevealPayload | null>(null)
+  const [audioPaused, setAudioPaused]           = useState(false)
+  const [editingScore, setEditingScore]         = useState<{ playerId: string; value: string } | null>(null)
+  const [currentPickerId, setCurrentPickerId]   = useState<string | null>(null)
+  const [pickOrder, setPickOrder]               = useState<string[]>([])
+  const [timedOut, setTimedOut]                 = useState(false)
+  const [timeLeft, setTimeLeft]                 = useState(0)
   const [exhaustedBuzzers, setExhaustedBuzzers] = useState<string[]>([])
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const timerRef     = useRef<ReturnType<typeof setInterval> | null>(null)
   const roundPhaseRef = useRef<'idle' | 'guess' | 'buzzed' | 'reveal'>('idle')
+
+  // ── timer helpers ────────────────────────────────────────────────────────
 
   function commitScore(playerId: string, raw: string) {
     const n = parseInt(raw, 10)
@@ -99,14 +103,16 @@ export default function HostPage() {
     }, 1000)
   }
 
+  // ── SignalR setup ────────────────────────────────────────────────────────
+
   useEffect(() => {
     gamesApi.list()
       .then(data => setGames(Array.isArray(data) ? data : []))
       .catch(err => console.error('[HostPage] games load failed:', err))
 
-    // Dedicated authenticated connection — not shared with player/display pages.
+    // Dedicated connection for the host — no JWT needed
     const conn = new signalR.HubConnectionBuilder()
-      .withUrl('/hub', { accessTokenFactory: () => getToken() ?? '' })
+      .withUrl('/hub')
       .withAutomaticReconnect()
       .configureLogging(signalR.LogLevel.Warning)
       .build()
@@ -137,6 +143,14 @@ export default function HostPage() {
       }
     })
 
+    conn.on('Error', ({ Message }: { Message: string }) => {
+      if (Message === 'Unauthorized') {
+        // Host token no longer valid — clear credentials and go to setup
+        clearHostCredentials()
+        setStatus('no-session')
+      }
+    })
+
     conn.on('LobbyPlayerJoined', ({ Player: p }: { Player: Player }) =>
       setPlayers(prev => [...prev.filter(x => x.SocketId !== p.SocketId), p]))
     conn.on('LobbyPlayerLeft', ({ PlayerId }: { PlayerId: string }) =>
@@ -154,7 +168,6 @@ export default function HostPage() {
       setBuzzedPlayer(p); roundPhaseRef.current = 'buzzed'; setRoundPhase('buzzed'); setTimedOut(false); pauseTimer()
     })
     conn.on('RoundAudioResume', () => {
-      // Wrong answer — add that player to exhausted list, resume timer and playback
       roundPhaseRef.current = 'guess'; setRoundPhase('guess')
       setBuzzedPlayer(prev => {
         if (prev) setExhaustedBuzzers(ex => [...ex, prev.SocketId])
@@ -163,7 +176,6 @@ export default function HostPage() {
       resumeTimer()
     })
     conn.on('RoundTimedOut', () => {
-      // All exhausted OR host timer expired — show time's up, wait for manual reveal
       roundPhaseRef.current = 'guess'; setRoundPhase('guess')
       setBuzzedPlayer(null)
       setTimedOut(true)
@@ -177,7 +189,9 @@ export default function HostPage() {
       setCurrentCardId(null); roundPhaseRef.current = 'idle'; setRoundPhase('idle')
       setAnswerHint(null); setReveal(null); setBuzzedPlayer(null); setTimedOut(false)
       setExhaustedBuzzers([]); clearTimer()
-      conn.invoke('HostJoin').catch(() => {})
+      // Refresh state from server in case we reconnected mid-game
+      if (sessionIdRef.current && hostTokenRef.current)
+        conn.invoke('HostJoin', sessionIdRef.current, hostTokenRef.current).catch(() => {})
     })
     conn.on('ScoresUpdate', ({ Scores }: ScoresUpdatePayload) => setPlayers(Scores))
     conn.on('CardsUpdate', ({ Cards }: { Cards: CardSummary[] }) => setCards(Cards ?? []))
@@ -187,9 +201,15 @@ export default function HostPage() {
       setPickOrder(p.PickOrder)
     })
 
-    // Start and join host group
+    // Start connection; if we have saved credentials, re-join immediately
     conn.start()
-      .then(() => conn.invoke('HostJoin').catch(() => {}))
+      .then(() => {
+        const sid   = sessionIdRef.current
+        const token = hostTokenRef.current
+        if (sid && token) {
+          conn.invoke('HostJoin', sid, token).catch(() => {})
+        }
+      })
       .catch(err => console.error('[HostPage] SignalR start failed:', err))
 
     return () => {
@@ -198,18 +218,39 @@ export default function HostPage() {
     }
   }, [])
 
-  // ── Session creation ────────────────────────────────────────────────────
+  // ── credential helpers ───────────────────────────────────────────────────
+
+  function saveHostCredentials(sessionId: string, token: string, code: string) {
+    sessionStorage.setItem(SS_SESSION_ID, sessionId)
+    sessionStorage.setItem(SS_HOST_TOKEN, token)
+    sessionStorage.setItem(SS_ROOM_CODE,  code)
+    sessionIdRef.current = sessionId
+    hostTokenRef.current = token
+    setRoomCode(code)
+  }
+
+  function clearHostCredentials() {
+    sessionStorage.removeItem(SS_SESSION_ID)
+    sessionStorage.removeItem(SS_HOST_TOKEN)
+    sessionStorage.removeItem(SS_ROOM_CODE)
+    sessionIdRef.current = ''
+    hostTokenRef.current = ''
+    setRoomCode('')
+  }
+
+  // ── session creation ─────────────────────────────────────────────────────
 
   async function createSession() {
     if (!selectedGameId) return
     setCreatingSession(true)
     setSessionError('')
     try {
-      await sessionsApi.create(selectedGameId)
+      const result = await sessionsApi.create(selectedGameId)
+      saveHostCredentials(result.Id, result.HostToken, result.RoomCode)
       setStatus('lobby')
       setPlayers([])
       setCards([])
-      connRef.current?.invoke('HostJoin').catch(() => {})
+      connRef.current?.invoke('HostJoin', result.Id, result.HostToken).catch(() => {})
     } catch (err) {
       setSessionError(err instanceof Error ? err.message : 'Failed to create session')
     } finally {
@@ -217,21 +258,26 @@ export default function HostPage() {
     }
   }
 
-  // ── Hub actions ─────────────────────────────────────────────────────────
+  // ── hub actions ──────────────────────────────────────────────────────────
 
   const invoke = (method: string, ...args: unknown[]) =>
     connRef.current?.invoke(method, ...args).catch(console.error)
 
   const currentCard = cards.find(c => c.Id === currentCardId)
 
-  // ── No session ──────────────────────────────────────────────────────────
+  // ── share URLs ───────────────────────────────────────────────────────────
+  const origin     = window.location.origin
+  const playerUrl  = roomCode ? `${origin}/?room=${roomCode}` : ''
+  const displayUrl = roomCode ? `${origin}/display?room=${roomCode}` : ''
+
+  // ── no-session setup screen ──────────────────────────────────────────────
   if (status === 'no-session') {
     return (
       <div className="page" style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <div className="card" style={{ width: 400 }}>
-          <h2 style={{ marginBottom: 4 }}>Host Panel</h2>
+        <div className="card" style={{ width: 420 }}>
+          <h2 style={{ marginBottom: 4 }}>Host a Room</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: 20 }}>
-            Create a new game session to get started.
+            Create a new game room and share the code with players.
           </p>
           <div style={{ marginBottom: 16 }}>
             <label>Select game</label>
@@ -251,7 +297,7 @@ export default function HostPage() {
             disabled={!selectedGameId || creatingSession}
             onClick={createSession}
           >
-            {creatingSession ? 'Creating…' : 'Create Session →'}
+            {creatingSession ? 'Creating…' : 'Create Room →'}
           </button>
           {sessionError && (
             <p style={{ color: 'var(--red)', fontSize: '0.875rem', marginTop: 10 }}>{sessionError}</p>
@@ -264,7 +310,7 @@ export default function HostPage() {
     )
   }
 
-  // ── Ended ───────────────────────────────────────────────────────────────
+  // ── ended ────────────────────────────────────────────────────────────────
   if (status === 'ended') {
     const sorted = [...players].sort((a, b) => b.Score - a.Score)
     return (
@@ -279,14 +325,17 @@ export default function HostPage() {
             </div>
           ))}
         </div>
-        <button className="btn-secondary" style={{ marginTop: 24 }} onClick={() => setStatus('no-session')}>
-          New Session
+        <button className="btn-secondary" style={{ marginTop: 24 }} onClick={() => {
+          clearHostCredentials()
+          setStatus('no-session')
+        }}>
+          New Room
         </button>
       </div>
     )
   }
 
-  // ── Lobby / Active ───────────────────────────────────────────────────────
+  // ── lobby / active ───────────────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
 
@@ -306,15 +355,27 @@ export default function HostPage() {
           }}>
             {status === 'lobby' ? 'LOBBY' : 'LIVE'}
           </span>
+
+          {/* Room code badge */}
+          {roomCode && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: 'var(--surface2)', border: '1px solid var(--border)',
+              borderRadius: 8, padding: '4px 10px',
+            }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1 }}>Room</span>
+              <span style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '1rem', letterSpacing: 3, color: 'var(--accent-light)' }}>{roomCode}</span>
+            </div>
+          )}
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <Link to="/admin" style={{ fontSize: '0.85rem' }}>Admin</Link>
-          {status === 'lobby' && (
+          {(status === 'lobby' || status === 'active') && (
             <button
               style={{ background: 'none', color: 'var(--text-muted)', fontSize: '0.8rem', padding: '2px 8px', border: '1px solid var(--border)', borderRadius: 6 }}
-              onClick={() => { if (confirm('End this session and go back to setup?')) invoke('HostEndGame') }}
+              onClick={() => { if (confirm('End this room and go back to setup?')) invoke('HostEndGame') }}
             >
-              End Session
+              End Room
             </button>
           )}
         </div>
@@ -323,13 +384,41 @@ export default function HostPage() {
       {/* Body */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
-        {/* Left sidebar: players */}
+        {/* Left sidebar: players + share links */}
         <div style={{
-          width: 220, flexShrink: 0, padding: 16,
+          width: 240, flexShrink: 0, padding: 16,
           borderRight: '1px solid var(--border)',
           display: 'flex', flexDirection: 'column', gap: 8,
           overflowY: 'auto',
         }}>
+
+          {/* Share links */}
+          {roomCode && (
+            <div style={{ marginBottom: 4, background: 'var(--surface2)', borderRadius: 8, padding: '10px 12px', fontSize: '0.78rem' }}>
+              <div style={{ fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Share links</div>
+              <div style={{ marginBottom: 6 }}>
+                <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>Players join at:</div>
+                <div
+                  style={{ fontFamily: 'monospace', wordBreak: 'break-all', color: 'var(--accent-light)', cursor: 'pointer' }}
+                  onClick={() => navigator.clipboard?.writeText(playerUrl)}
+                  title="Click to copy"
+                >
+                  {playerUrl}
+                </div>
+              </div>
+              <div>
+                <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>Display screen:</div>
+                <div
+                  style={{ fontFamily: 'monospace', wordBreak: 'break-all', color: 'var(--text-muted)', cursor: 'pointer' }}
+                  onClick={() => navigator.clipboard?.writeText(displayUrl)}
+                  title="Click to copy"
+                >
+                  {displayUrl}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>
             Players ({players.length})
           </div>
@@ -341,7 +430,7 @@ export default function HostPage() {
           )}
 
           {players.map(p => {
-            const isPicker = p.SocketId === currentPickerId
+            const isPicker    = p.SocketId === currentPickerId
             const isExhausted = exhaustedBuzzers.includes(p.SocketId)
             return (
               <div
@@ -461,6 +550,12 @@ export default function HostPage() {
                   <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                     Song {songIndex + 1} / {totalSongs} · {'★'.repeat(currentCard.Stars)}
                   </div>
+                  {timeLeft > 0 && (roundPhase === 'guess' || roundPhase === 'buzzed') && (
+                    <div style={{ fontSize: '0.85rem', fontVariantNumeric: 'tabular-nums', marginTop: 4,
+                      color: timeLeft / (timeLeft > 10 ? 60 : 1) > 0.5 ? 'var(--green)' : timeLeft > 10 ? 'var(--yellow)' : 'var(--red)' }}>
+                      ⏱ {timeLeft}s
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   {(roundPhase === 'guess' || roundPhase === 'reveal') && (
@@ -548,7 +643,7 @@ export default function HostPage() {
               }}>
                 {cards.map(c => {
                   const complete = c.PlayedCount >= c.TotalSongs
-                  const active = c.Id === currentCardId
+                  const active   = c.Id === currentCardId
                   return (
                     <button
                       key={c.Id}
@@ -582,12 +677,21 @@ export default function HostPage() {
             }}>
               <div style={{ fontSize: '2rem' }}>⏳</div>
               <div style={{ fontWeight: 600, fontSize: '1.1rem', color: 'var(--text)' }}>Waiting for players</div>
-              <div style={{ fontSize: '0.9rem' }}>
-                Players join at <strong style={{ color: 'var(--accent-light)' }}>{window.location.origin}</strong>
+              <div style={{ fontSize: '0.9rem', textAlign: 'center' }}>
+                Players join at{' '}
+                <strong
+                  style={{ color: 'var(--accent-light)', cursor: 'pointer' }}
+                  onClick={() => navigator.clipboard?.writeText(playerUrl)}
+                  title="Click to copy"
+                >
+                  {playerUrl}
+                </strong>
               </div>
-              <div style={{ fontSize: '0.85rem' }}>
-                Start the game once everyone has joined.
-              </div>
+              {roomCode && (
+                <div style={{ fontSize: '2rem', fontFamily: 'monospace', fontWeight: 800, letterSpacing: 6, color: 'var(--accent-light)', background: 'var(--surface2)', padding: '12px 24px', borderRadius: 12 }}>
+                  {roomCode}
+                </div>
+              )}
             </div>
           )}
         </div>

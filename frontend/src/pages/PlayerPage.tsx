@@ -18,33 +18,44 @@ interface RevealInfo {
   WinnerId: string | null
 }
 
+/** Get `?room=` from the URL (uppercase, trimmed). */
+function getRoomFromUrl(): string {
+  return new URLSearchParams(window.location.search).get('room')?.toUpperCase().trim() ?? ''
+}
+
 export default function PlayerPage() {
-  const connRef = useRef<signalR.HubConnection | null>(null)
+  const connRef  = useRef<signalR.HubConnection | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Join form
-  const [name, setName] = useState(() => localStorage.getItem('st_name') || '')
+  const [name,  setName]  = useState(() => localStorage.getItem('st_name')  || '')
   const [color, setColor] = useState(() => localStorage.getItem('st_color') || 'blue')
+  const [roomCode, setRoomCode] = useState(() => {
+    const fromUrl = getRoomFromUrl()
+    return fromUrl || localStorage.getItem('st_room') || ''
+  })
 
   // Game state
-  const [phase, setPhase] = useState<Phase>(() =>
-    localStorage.getItem('st_name') ? 'reconnecting' : 'join'
-  )
-  const [players, setPlayers] = useState<Player[]>([])
-  const [cards, setCards] = useState<CardSummary[]>([])
+  const [phase, setPhase] = useState<Phase>(() => {
+    const hasName = !!localStorage.getItem('st_name')
+    const hasRoom = !!(getRoomFromUrl() || localStorage.getItem('st_room'))
+    return hasName && hasRoom ? 'reconnecting' : 'join'
+  })
+  const [players, setPlayers]         = useState<Player[]>([])
+  const [cards, setCards]             = useState<CardSummary[]>([])
   const [currentCard, setCurrentCard] = useState<CardSummary | null>(null)
-  const [songIndex, setSongIndex] = useState(0)
-  const [totalSongs, setTotalSongs] = useState(0)
+  const [songIndex, setSongIndex]     = useState(0)
+  const [totalSongs, setTotalSongs]   = useState(0)
   const [buzzedPlayer, setBuzzedPlayer] = useState<{ SocketId: string; Name: string; Color: string } | null>(null)
-  const [revealInfo, setRevealInfo] = useState<RevealInfo | null>(null)
+  const [revealInfo, setRevealInfo]   = useState<RevealInfo | null>(null)
   const [finalScores, setFinalScores] = useState<Player[]>([])
-  const [roundPhase, setRoundPhase] = useState<'idle' | 'guess' | 'buzzed' | 'reveal'>('idle')
-  const [timeLeft, setTimeLeft] = useState(0)
+  const [roundPhase, setRoundPhase]   = useState<'idle' | 'guess' | 'buzzed' | 'reveal'>('idle')
+  const [timeLeft, setTimeLeft]       = useState(0)
   const [clipDuration, setClipDuration] = useState(60)
-  const [error, setError] = useState('')
-  const [timedOut, setTimedOut] = useState(false)
+  const [error, setError]             = useState('')
+  const [timedOut, setTimedOut]       = useState(false)
   const [currentPickerId, setCurrentPickerId] = useState<string | null>(null)
-  const [pickOrder, setPickOrder] = useState<string[]>([])
+  const [pickOrder, setPickOrder]     = useState<string[]>([])
   const mySocketId = useRef('')
   const canBuzzRef = useRef(false)
 
@@ -194,16 +205,21 @@ export default function PlayerPage() {
         if (Message === 'banned') {
           setError(`You are temporarily banned. Try again in ${Math.ceil((RetryAfter ?? 30000) / 1000)}s.`)
         } else if (Message === 'Game already in progress') {
-          setError('The game has already started. You can\'t join right now.')
+          setError("The game has already started. You can't join right now.")
+        } else if (Message === 'Room not found') {
+          setError('Room not found. Check your room code and try again.')
+          localStorage.removeItem('st_room')
         } else {
           setError(Message)
         }
       })
+
       // Auto-rejoin if credentials are saved (browser refresh recovery)
-      const savedName = localStorage.getItem('st_name')
+      const savedName  = localStorage.getItem('st_name')
       const savedColor = localStorage.getItem('st_color') ?? 'blue'
-      if (savedName) {
-        conn.invoke('PlayerJoin', savedName, savedColor).catch(() => setPhase('join'))
+      const savedRoom  = getRoomFromUrl() || localStorage.getItem('st_room') ?? ''
+      if (savedName && savedRoom) {
+        conn.invoke('PlayerJoin', savedName, savedColor, savedRoom).catch(() => setPhase('join'))
       }
     })
 
@@ -221,11 +237,12 @@ export default function PlayerPage() {
 
   function handleJoin(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim() || !connRef.current) return
+    if (!name.trim() || !roomCode.trim() || !connRef.current) return
     setError('')
-    localStorage.setItem('st_name', name)
+    localStorage.setItem('st_name',  name)
     localStorage.setItem('st_color', color)
-    connRef.current.invoke('PlayerJoin', name.trim(), color)
+    localStorage.setItem('st_room',  roomCode.toUpperCase())
+    connRef.current.invoke('PlayerJoin', name.trim(), color, roomCode.toUpperCase())
     setPhase('lobby')
   }
 
@@ -235,12 +252,12 @@ export default function PlayerPage() {
     connRef.current?.invoke('PlayerBuzz')
   }
 
-  const myId = mySocketId.current
+  const myId    = mySocketId.current
   const canBuzz = roundPhase === 'guess' && !timedOut
   canBuzzRef.current = canBuzz
 
   // timer color: green → yellow → red
-  const timerPct = clipDuration > 0 ? timeLeft / clipDuration : 0
+  const timerPct   = clipDuration > 0 ? timeLeft / clipDuration : 0
   const timerColor = timerPct > 0.5 ? 'var(--green)' : timerPct > 0.25 ? 'var(--yellow)' : 'var(--red)'
 
   // ── Render ──────────────────────────────────────────────────────────────
@@ -250,7 +267,10 @@ export default function PlayerPage() {
       <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
         <div style={{ fontSize: '2rem', animation: 'spin 1s linear infinite' }}>⏳</div>
         <p style={{ color: 'var(--text-muted)' }}>Reconnecting as <strong style={{ color: 'var(--text)' }}>{name}</strong>…</p>
-        <button className="btn-secondary" style={{ fontSize: '0.85rem', padding: '6px 14px' }} onClick={() => { localStorage.removeItem('st_name'); localStorage.removeItem('st_color'); setPhase('join') }}>
+        <button className="btn-secondary" style={{ fontSize: '0.85rem', padding: '6px 14px' }} onClick={() => {
+          localStorage.removeItem('st_name'); localStorage.removeItem('st_color'); localStorage.removeItem('st_room')
+          setPhase('join')
+        }}>
           Join as someone else
         </button>
       </div>
@@ -258,15 +278,30 @@ export default function PlayerPage() {
   }
 
   if (phase === 'join') {
+    const urlRoom = getRoomFromUrl()
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div className="card" style={{ width: 360 }}>
           <h2 style={{ textAlign: 'center', marginBottom: 24 }}>Join Game</h2>
           {error && <p style={{ color: 'var(--red)', marginBottom: 12, fontSize: '0.875rem' }}>{error}</p>}
           <form onSubmit={handleJoin}>
+            {/* Room code field — pre-filled from URL but editable */}
+            <div style={{ marginBottom: 16 }}>
+              <label>Room code</label>
+              <input
+                value={roomCode}
+                onChange={e => setRoomCode(e.target.value.toUpperCase())}
+                placeholder="e.g. ABC123"
+                maxLength={6}
+                required
+                style={{ fontFamily: 'monospace', letterSpacing: 3, textTransform: 'uppercase' }}
+                readOnly={!!urlRoom}
+                autoFocus={!urlRoom}
+              />
+            </div>
             <div style={{ marginBottom: 16 }}>
               <label>Your name</label>
-              <input value={name} onChange={e => setName(e.target.value)} autoFocus maxLength={20} required />
+              <input value={name} onChange={e => setName(e.target.value)} autoFocus={!!urlRoom} maxLength={20} required />
             </div>
             <div style={{ marginBottom: 20 }}>
               <label>Pick a color</label>
@@ -304,6 +339,7 @@ export default function PlayerPage() {
     connRef.current?.invoke('PlayerLeave').catch(() => {})
     localStorage.removeItem('st_name')
     localStorage.removeItem('st_color')
+    localStorage.removeItem('st_room')
     setPhase('join')
   }
 
@@ -311,6 +347,11 @@ export default function PlayerPage() {
     return (
       <div className="page" style={{ alignItems: 'center' }}>
         <h1 style={{ fontSize: '2rem', marginBottom: 8 }}>Lobby</h1>
+        {roomCode && (
+          <div style={{ fontSize: '1.1rem', fontFamily: 'monospace', fontWeight: 700, letterSpacing: 4, color: 'var(--accent-light)', marginBottom: 8 }}>
+            Room: {roomCode}
+          </div>
+        )}
         <p style={{ color: 'var(--text-muted)', marginBottom: 32 }}>Waiting for host to start the game…</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center' }}>
           {players.map(p => (
@@ -332,7 +373,7 @@ export default function PlayerPage() {
           style={{ marginTop: 40, fontSize: '0.85rem', padding: '6px 16px', color: 'var(--text-muted)' }}
           onClick={handleLogout}
         >
-          ↩ Change name
+          ↩ Change name / room
         </button>
       </div>
     )
@@ -481,7 +522,7 @@ export default function PlayerPage() {
         onClick={buzz}
       >
         {roundPhase === 'idle' ? 'Waiting…'
-          : timedOut ? '⏰ Time\'s up'
+          : timedOut ? "⏰ Time's up"
           : roundPhase === 'guess' ? '🔔 BUZZ'
           : roundPhase === 'buzzed' ? 'Buzzed!'
           : '…'}

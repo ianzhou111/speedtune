@@ -37,6 +37,8 @@ public class Session
     [BsonRepresentation(BsonType.ObjectId)]
     public string GameId { get; set; } = "";
     public string Status { get; set; } = "lobby"; // "lobby" | "active" | "ended"
+    public string RoomCode { get; set; } = "";     // 6-char public join code
+    public string HostToken { get; set; } = "";    // secret token for host auth
     public List<Player> Players { get; set; } = new();
     public List<PlayedSong> PlayedSongs { get; set; } = new();
     public CurrentRound? CurrentRound { get; set; }

@@ -16,6 +16,7 @@ var jwtKey = builder.Configuration["Jwt:Key"]
 // ── Services ────────────────────────────────────────────────────────────────
 
 builder.Services.AddSingleton<MongoDbService>();
+builder.Services.AddSingleton<RoomTracker>();
 builder.Services.AddSingleton<GameEngineService>();
 
 builder.Services.AddHttpClient();

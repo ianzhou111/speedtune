@@ -79,12 +79,19 @@ export const gamesApi = {
 
 // ── Sessions API ───────────────────────────────────────────────────────────
 
+export interface CreateSessionResult {
+  Id: string
+  RoomCode: string
+  HostToken: string
+}
+
 export const sessionsApi = {
   getActive: () => request<object | null>('/api/sessions/active'),
+  /** No auth required — returns { Id, RoomCode, HostToken } for the new session. */
   create: (gameId: string) =>
-    request<object>('/api/sessions', {
+    request<CreateSessionResult>('/api/sessions', {
       method: 'POST',
-      body: JSON.stringify({ gameId }),
+      body: JSON.stringify({ GameId: gameId }),
     }),
 }
 
