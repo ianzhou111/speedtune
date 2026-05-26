@@ -7,6 +7,7 @@ import AdminPage from './pages/AdminPage'
 import VideoTestPage from './pages/VideoTestPage'
 import AdminGameEditor from './pages/AdminGameEditor'
 import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null }
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/admin/games/:id" element={<AdminGameEditor />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
           <Route path="/test" element={<VideoTestPage />} />
         </Routes>
       </ErrorBoundary>

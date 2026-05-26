@@ -16,4 +16,5 @@ public class MongoDbService
 
     public IMongoCollection<Game> Games => _db.GetCollection<Game>("games");
     public IMongoCollection<Session> Sessions => _db.GetCollection<Session>("sessions");
+    public IMongoCollection<AdminUser> AdminUsers => _db.GetCollection<AdminUser>("admin_users");
 }

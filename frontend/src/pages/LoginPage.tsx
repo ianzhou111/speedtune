@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { login } from '../lib/api'
 
 export default function LoginPage() {
@@ -53,6 +53,11 @@ export default function LoginPage() {
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
+
+        <p style={{ textAlign: 'center', marginTop: 16, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+          No account?{' '}
+          <Link to="/register" style={{ color: 'var(--accent-light)' }}>Register with invite code</Link>
+        </p>
       </div>
     </div>
   )

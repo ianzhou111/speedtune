@@ -52,7 +52,16 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 export async function login(username: string, password: string): Promise<string> {
   const data = await request<{ token: string }>('/api/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ Username: username, Password: password }),
+  })
+  setToken(data.token)
+  return data.token
+}
+
+export async function register(username: string, password: string, registrationCode: string): Promise<string> {
+  const data = await request<{ token: string }>('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ Username: username, Password: password, RegistrationCode: registrationCode }),
   })
   setToken(data.token)
   return data.token
