@@ -46,6 +46,7 @@ export default function PlayerPage() {
   const [currentPickerId, setCurrentPickerId] = useState<string | null>(null)
   const [pickOrder, setPickOrder] = useState<string[]>([])
   const mySocketId = useRef('')
+  const canBuzzRef = useRef(false)
 
   function clearTimer() {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
@@ -62,6 +63,18 @@ export default function PlayerPage() {
       })
     }, 1000)
   }
+
+  // Keyboard buzz — Space or Enter triggers buzz when eligible
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.code !== 'Space' && e.code !== 'Enter') return
+      if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'BUTTON') return
+      e.preventDefault()
+      if (canBuzzRef.current) connRef.current?.invoke('PlayerBuzz')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   // Taken colors from other players
   const takenColors = players.filter(p => p.SocketId !== mySocketId.current).map(p => p.Color)
@@ -224,6 +237,7 @@ export default function PlayerPage() {
 
   const myId = mySocketId.current
   const canBuzz = roundPhase === 'guess' && !timedOut
+  canBuzzRef.current = canBuzz
 
   // timer color: green → yellow → red
   const timerPct = clipDuration > 0 ? timeLeft / clipDuration : 0
