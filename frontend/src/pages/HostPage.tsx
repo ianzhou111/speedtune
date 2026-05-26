@@ -537,41 +537,46 @@ export default function HostPage() {
 
           {/* Card grid */}
           {status === 'active' && (
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: 10, color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontWeight: 700, color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase' }}>
                 Board — click to open a card
               </div>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))',
-                gap: 8,
-              }}>
-                {cards.map(c => {
-                  const complete = c.PlayedCount >= c.TotalSongs
-                  const active = c.Id === currentCardId
-                  return (
-                    <button
-                      key={c.Id}
-                      disabled={complete || active || roundPhase !== 'idle'}
-                      onClick={() => invoke('HostOpenCard', c.Id)}
-                      style={{
-                        background: active ? 'var(--accent)' : complete ? 'var(--surface2)' : 'var(--surface)',
-                        border: `2px solid ${active ? 'var(--accent-light)' : 'var(--border)'}`,
-                        borderRadius: 10, padding: '10px 6px',
-                        color: 'var(--text)', textAlign: 'center',
-                        opacity: complete ? 0.35 : 1,
-                        cursor: complete || active || roundPhase !== 'idle' ? 'not-allowed' : 'pointer',
-                      }}
-                    >
-                      <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{c.Label}</div>
-                      <div style={{ color: 'var(--yellow)', fontSize: '0.8rem' }}>{'★'.repeat(c.Stars)}</div>
-                      <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginTop: 2 }}>
-                        {c.PlayedCount}/{c.TotalSongs}
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
+              {[1, 2, 3, 4, 5].map(stars => {
+                const group = cards.filter(c => c.Stars === stars)
+                if (group.length === 0) return null
+                return (
+                  <div key={stars}>
+                    <div style={{ fontSize: '0.65rem', color: '#eab308', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 5 }}>
+                      {'★'.repeat(stars)}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 8 }}>
+                      {group.map(c => {
+                        const complete = c.PlayedCount >= c.TotalSongs
+                        const active = c.Id === currentCardId
+                        return (
+                          <button
+                            key={c.Id}
+                            disabled={complete || active || roundPhase !== 'idle'}
+                            onClick={() => invoke('HostOpenCard', c.Id)}
+                            style={{
+                              background: active ? 'var(--accent)' : complete ? 'var(--surface2)' : 'var(--surface)',
+                              border: `2px solid ${active ? 'var(--accent-light)' : 'var(--border)'}`,
+                              borderRadius: 10, padding: '10px 6px',
+                              color: 'var(--text)', textAlign: 'center',
+                              opacity: complete ? 0.35 : 1,
+                              cursor: complete || active || roundPhase !== 'idle' ? 'not-allowed' : 'pointer',
+                            }}
+                          >
+                            <div style={{ fontWeight: 600, fontSize: '0.82rem', marginBottom: 3 }}>{c.Label}</div>
+                            <div style={{ color: '#eab308', fontSize: '0.65rem', marginBottom: 2 }}>{'★'.repeat(c.Stars)}</div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>{c.PlayedCount}/{c.TotalSongs}</div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
 
