@@ -405,6 +405,19 @@ export default function AdminGameEditor() {
           >
             {collapsedCards.size === game.Cards.length ? '▶ Expand All' : '▼ Collapse All'}
           </button>
+          <button
+            className="btn-secondary"
+            style={{ fontSize: '0.85rem', padding: '6px 12px' }}
+            onClick={() => {
+              if (!game) return
+              const total = game.Cards.reduce((n, c) => n + c.Songs.length, 0)
+              if (total === 0) return
+              if (!confirm(`Remove all ${total} songs from all ${game.Cards.length} cards? The cards themselves will be kept.`)) return
+              setGame({ ...game, Cards: game.Cards.map(c => ({ ...c, Songs: [] })) })
+            }}
+          >
+            Clear all songs
+          </button>
           <button className="btn-secondary" onClick={addCard}>+ Add Card</button>
         </div>
       </div>
