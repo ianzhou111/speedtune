@@ -9,6 +9,7 @@ export default function AdminPage() {
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [copyingId, setCopyingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isAuthenticated()) { navigate('/login'); return }
@@ -24,6 +25,17 @@ export default function AdminPage() {
       navigate(`/admin/games/${game.Id}`)
     } finally {
       setCreating(false)
+    }
+  }
+
+  async function duplicateGame(id: string) {
+    setCopyingId(id)
+    try {
+      const copy = await gamesApi.duplicate(id)
+      setGames(g => [copy, ...g])
+      navigate(`/admin/games/${copy.Id}`)
+    } finally {
+      setCopyingId(null)
     }
   }
 
@@ -76,6 +88,15 @@ export default function AdminPage() {
               <Link to={`/admin/games/${game.Id}`}>
                 <button className="btn-secondary" style={{ padding: '6px 14px' }}>Edit</button>
               </Link>
+              <button
+                className="btn-secondary"
+                style={{ padding: '6px 14px' }}
+                disabled={copyingId === game.Id}
+                onClick={() => duplicateGame(game.Id)}
+                title="Duplicate this game"
+              >
+                {copyingId === game.Id ? 'Copying…' : '⧉ Copy'}
+              </button>
               <button
                 className="btn-danger"
                 style={{ padding: '6px 14px' }}

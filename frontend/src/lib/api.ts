@@ -75,6 +75,8 @@ export const gamesApi = {
     }),
   delete: (id: string) =>
     request<void>(`/api/games/${id}`, { method: 'DELETE' }),
+  duplicate: (id: string) =>
+    request<Game>(`/api/games/${id}/duplicate`, { method: 'POST' }),
 }
 
 // ── Sessions API ───────────────────────────────────────────────────────────

@@ -68,6 +68,35 @@ public class GamesController(MongoDbService db) : ControllerBase
         return Ok(existing);
     }
 
+    // ── POST /api/games/{id}/duplicate ────────────────────────────────────
+
+    [HttpPost("{id}/duplicate")]
+    [Authorize]
+    public async Task<IActionResult> Duplicate(string id)
+    {
+        var source = await db.Games.Find(g => g.Id == id).FirstOrDefaultAsync();
+        if (source is null) return NotFound();
+
+        var copy = new Game
+        {
+            Name      = $"Copy of {source.Name}",
+            Settings  = source.Settings,
+            Cards     = source.Cards
+                .Select(c => new Card
+                {
+                    Id    = MongoDB.Bson.ObjectId.GenerateNewId().ToString(),
+                    Label = c.Label,
+                    Stars = c.Stars,
+                    Songs = c.Songs.ToList(),
+                })
+                .ToList(),
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+        await db.Games.InsertOneAsync(copy);
+        return CreatedAtAction(nameof(GetById), new { id = copy.Id }, copy);
+    }
+
     // ── DELETE /api/games/{id} ─────────────────────────────────────────────
 
     [HttpDelete("{id}")]
