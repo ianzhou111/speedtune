@@ -486,6 +486,11 @@ export default function PlayerPage() {
           : roundPhase === 'buzzed' ? 'Buzzed!'
           : '…'}
       </button>
+      {canBuzz && (
+        <div style={{ marginTop: 8, fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+          or press <kbd style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 6px', fontFamily: 'monospace' }}>Space</kbd> / <kbd style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 6px', fontFamily: 'monospace' }}>Enter</kbd>
+        </div>
+      )}
     </div>
   )
 }
