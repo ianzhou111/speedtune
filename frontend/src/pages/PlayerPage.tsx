@@ -295,6 +295,11 @@ export default function PlayerPage() {
               Join →
             </button>
           </form>
+          <div style={{ marginTop: 16, textAlign: 'center', borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+            <a href="/solo" style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textDecoration: 'none' }}>
+              🎵 Solo practice →
+            </a>
+          </div>
         </div>
       </div>
     )
