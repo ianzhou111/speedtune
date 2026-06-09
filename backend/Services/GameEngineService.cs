@@ -76,6 +76,9 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         else
         {
             session.Players.Add(new Player { SocketId = socketId, Name = name, Color = color });
+            // Force-joining mid-game: append to end of pick order so they get turns
+            if (session.Status == "active")
+                session.PickOrder.Add(socketId);
         }
 
         await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
@@ -86,6 +89,11 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
             await hub.Clients.All.SendAsync("LobbyPlayerLeft", new { PlayerId = oldSocketId });
             if (session.PickOrder.Count > 0)
                 await hub.Clients.All.SendAsync("PickerUpdate", BuildPickerDto(session));
+        }
+        else if (session.Status == "active" && session.PickOrder.Contains(socketId))
+        {
+            // Newly force-joined player: push updated pick order to everyone
+            await hub.Clients.All.SendAsync("PickerUpdate", BuildPickerDto(session));
         }
 
         var game = await GetGame(session.GameId);
