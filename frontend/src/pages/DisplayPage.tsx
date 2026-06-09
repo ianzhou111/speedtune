@@ -42,11 +42,33 @@ export default function DisplayPage() {
   const [currentPickerId, setCurrentPickerId] = useState<string | null>(null)
   const [pickOrder, setPickOrder] = useState<string[]>([])
   const [timedOut, setTimedOut] = useState(false)
+  const [buzzTimeLeft, setBuzzTimeLeft] = useState(0)
+  const buzzTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const roundPhaseRef = useRef<'idle' | 'guess' | 'buzzed' | 'reveal'>('idle')
 
   function applyVolume(v: number) {
     setVolume(v)
     if (videoRef.current) videoRef.current.volume = v
+  }
+
+  function startBuzzTimer(seconds: number) {
+    if (buzzTimerRef.current) clearInterval(buzzTimerRef.current)
+    setBuzzTimeLeft(seconds)
+    buzzTimerRef.current = setInterval(() => {
+      setBuzzTimeLeft(t => {
+        if (t <= 1) {
+          clearInterval(buzzTimerRef.current!)
+          buzzTimerRef.current = null
+          return 0
+        }
+        return t - 1
+      })
+    }, 1000)
+  }
+
+  function clearBuzzTimer() {
+    if (buzzTimerRef.current) { clearInterval(buzzTimerRef.current); buzzTimerRef.current = null }
+    setBuzzTimeLeft(0)
   }
 
   function clearTimer() {
@@ -168,11 +190,12 @@ export default function DisplayPage() {
         }
       })
 
-      conn.on('RoundBuzz', ({ Player: pl }: { Player: { SocketId: string; Name: string; Color: string } }) => {
+      conn.on('RoundBuzz', ({ Player: pl, BuzzTimerSeconds }: { Player: { SocketId: string; Name: string; Color: string }; BuzzTimerSeconds?: number }) => {
         setBuzzedPlayer(pl)
         _setRoundPhase('buzzed')
         setTimedOut(false)
-        pauseTimer() // keep remaining time visible, just stop counting
+        pauseTimer() // keep clip time visible, just stop counting
+        if (BuzzTimerSeconds && BuzzTimerSeconds > 0) startBuzzTimer(BuzzTimerSeconds)
       })
 
       conn.on('RoundAudioPause', () => { videoRef.current?.pause() })
@@ -180,6 +203,7 @@ export default function DisplayPage() {
 
       conn.on('RoundAudioResume', () => {
         setBuzzedPlayer(null)
+        clearBuzzTimer()
         _setRoundPhase('guess')
         const vid = videoRef.current
         if (vid) {
@@ -195,6 +219,7 @@ export default function DisplayPage() {
         setTimedOut(false)
         setVideoVisible(true)
         clearTimer()
+        clearBuzzTimer()
 
         const vid = videoRef.current
         if (vid) {
@@ -238,6 +263,7 @@ export default function DisplayPage() {
         setBuzzedPlayer(null)
         setVideoVisible(false)
         clearTimer()
+        clearBuzzTimer()
         if (videoRef.current) { videoRef.current.pause(); videoRef.current.src = '' }
         conn.invoke('DisplayJoin').catch(() => {})
       })
@@ -263,6 +289,7 @@ export default function DisplayPage() {
     return () => {
       active = false
       clearTimer()
+      clearBuzzTimer()
       const EVENTS = ['SessionState','LobbyPlayerJoined','LobbyPlayerLeft','GameStarted',
         'RoundSongStart','RoundBuzz','RoundAudioPause','RoundAudioPlay','RoundAudioResume','RoundAnswerReveal',
         'RoundCardComplete','ScoresUpdate','CardsUpdate','GameEnded','PickerUpdate','RoundTimedOut']
@@ -438,8 +465,20 @@ export default function DisplayPage() {
               {currentCard.Label} — {currentCard.Stars}★ — Song {songIndex + 1} / {totalSongs}
             </div>
             {roundPhase === 'buzzed' && buzzedPlayer && (
-              <div style={{ fontSize: '2rem', fontWeight: 800, color: PLAYER_COLORS[buzzedPlayer.Color] }}>
-                🎤 {buzzedPlayer.Name}!
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                <div style={{ fontSize: '2rem', fontWeight: 800, color: PLAYER_COLORS[buzzedPlayer.Color] }}>
+                  🎤 {buzzedPlayer.Name}!
+                </div>
+                {buzzTimeLeft > 0 && (
+                  <div style={{
+                    fontSize: '3rem', fontWeight: 900, lineHeight: 1,
+                    color: buzzTimeLeft > 10 ? 'var(--green)' : buzzTimeLeft > 5 ? 'var(--yellow)' : 'var(--red)',
+                    transition: 'color 0.3s',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    {buzzTimeLeft}
+                  </div>
+                )}
               </div>
             )}
             {roundPhase === 'reveal' && reveal && (

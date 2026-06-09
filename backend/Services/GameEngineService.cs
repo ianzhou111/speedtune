@@ -202,9 +202,11 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         session.CurrentRound.BuzzedPlayerId = socketId;
         await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
 
+        var game = await GetGame(session.GameId);
         await hub.Clients.All.SendAsync("RoundBuzz", new
         {
-            Player = new { player.SocketId, player.Name, player.Color }
+            Player = new { player.SocketId, player.Name, player.Color },
+            BuzzTimerSeconds = game?.Settings.BuzzTimerSeconds ?? 30,
         });
         await hub.Clients.Group("display").SendAsync("RoundAudioPause");
     }

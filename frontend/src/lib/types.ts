@@ -116,6 +116,7 @@ export interface Card {
 
 export interface GameSettings {
   ClipDuration: number
+  BuzzTimerSeconds: number
   WrongAnswerDeduction: number
   StarPointMap: Record<number, number>
 }

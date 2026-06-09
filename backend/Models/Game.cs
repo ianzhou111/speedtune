@@ -33,6 +33,7 @@ public class Card
 public class GameSettings
 {
     public int ClipDuration { get; set; } = 60;
+    public int BuzzTimerSeconds { get; set; } = 30;
     public int WrongAnswerDeduction { get; set; } = 0;
     [BsonDictionaryOptions(DictionaryRepresentation.ArrayOfArrays)]
     public Dictionary<int, int> StarPointMap { get; set; } = new()

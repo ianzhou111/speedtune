@@ -261,6 +261,14 @@ export default function AdminGameEditor() {
             />
           </div>
           <div>
+            <label>Buzz timer (seconds)</label>
+            <input
+              type="number"
+              value={game.Settings.BuzzTimerSeconds ?? 30}
+              onChange={e => setGame({ ...game, Settings: { ...game.Settings, BuzzTimerSeconds: +e.target.value } })}
+            />
+          </div>
+          <div>
             <label>Wrong answer deduction</label>
             <input
               type="number"
