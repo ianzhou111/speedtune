@@ -29,7 +29,7 @@ public class GameHub(GameEngineService engine, MongoDbService db, IConfiguration
     /// </summary>
     public async Task PlayerJoinForce(string name, string color, string adminCode)
     {
-        var expected = config["Admin:RegistrationCode"] ?? "";
+        var expected = config["Join:Override"] ?? "";
         if (string.IsNullOrWhiteSpace(expected) || adminCode != expected)
         {
             await Clients.Caller.SendAsync("Error", new { Message = "Invalid admin code" });
