@@ -5,7 +5,7 @@ using SpeedTune.Api.Services;
 
 namespace SpeedTune.Api.Hubs;
 
-public class GameHub(GameEngineService engine, MongoDbService db) : Hub
+public class GameHub(GameEngineService engine, MongoDbService db, IConfiguration config) : Hub
 {
     // ── helpers ────────────────────────────────────────────────────────────
 
@@ -21,6 +21,22 @@ public class GameHub(GameEngineService engine, MongoDbService db) : Hub
     {
         await Groups.AddToGroupAsync(Context.ConnectionId, "players");
         await engine.PlayerJoin(Context.ConnectionId, name, color);
+    }
+
+    /// <summary>
+    /// Admin-only override: allows joining a game that is already in progress.
+    /// Requires the Admin:RegistrationCode from server config.
+    /// </summary>
+    public async Task PlayerJoinForce(string name, string color, string adminCode)
+    {
+        var expected = config["Admin:RegistrationCode"] ?? "";
+        if (string.IsNullOrWhiteSpace(expected) || adminCode != expected)
+        {
+            await Clients.Caller.SendAsync("Error", new { Message = "Invalid admin code" });
+            return;
+        }
+        await Groups.AddToGroupAsync(Context.ConnectionId, "players");
+        await engine.PlayerJoin(Context.ConnectionId, name, color, skipActiveCheck: true);
     }
 
     // ── display screen ─────────────────────────────────────────────────────

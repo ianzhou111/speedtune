@@ -26,7 +26,7 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
 
     // ── player join ────────────────────────────────────────────────────────
 
-    public async Task PlayerJoin(string socketId, string name, string color)
+    public async Task PlayerJoin(string socketId, string name, string color, bool skipActiveCheck = false)
     {
         var session = await GetActiveSession();
         if (session is null) return;
@@ -42,7 +42,8 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         }
 
         // Block new players from joining an active game (reconnects allowed)
-        if (session.Status == "active" && sameNamePlayer is null &&
+        // skipActiveCheck = true when an admin has overridden this restriction
+        if (!skipActiveCheck && session.Status == "active" && sameNamePlayer is null &&
             !session.Players.Any(p => p.SocketId == socketId))
         {
             await hub.Clients.Client(socketId).SendAsync("Error", new { Message = "Game already in progress" });

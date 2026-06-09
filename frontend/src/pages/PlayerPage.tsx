@@ -43,6 +43,8 @@ export default function PlayerPage() {
   const [clipDuration, setClipDuration] = useState(60)
   const [error, setError] = useState('')
   const [timedOut, setTimedOut] = useState(false)
+  const [showOverride, setShowOverride] = useState(false)
+  const [adminCode, setAdminCode] = useState('')
   const [currentPickerId, setCurrentPickerId] = useState<string | null>(null)
   const [pickOrder, setPickOrder] = useState<string[]>([])
   const mySocketId = useRef('')
@@ -229,6 +231,15 @@ export default function PlayerPage() {
     setPhase('lobby')
   }
 
+  function handleForceJoin() {
+    if (!name.trim() || !connRef.current || !adminCode.trim()) return
+    setError('')
+    localStorage.setItem('st_name', name)
+    localStorage.setItem('st_color', color)
+    connRef.current.invoke('PlayerJoinForce', name.trim(), color, adminCode.trim())
+    setPhase('lobby')
+  }
+
   // ── Buzz ────────────────────────────────────────────────────────────────
 
   function buzz() {
@@ -262,7 +273,48 @@ export default function PlayerPage() {
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div className="card" style={{ width: 360 }}>
           <h2 style={{ textAlign: 'center', marginBottom: 24 }}>Join Game</h2>
-          {error && <p style={{ color: 'var(--red)', marginBottom: 12, fontSize: '0.875rem' }}>{error}</p>}
+          {error && (
+            <div style={{ marginBottom: 12 }}>
+              <p style={{ color: 'var(--red)', fontSize: '0.875rem', margin: 0 }}>{error}</p>
+              {error === "The game has already started. You can't join right now." && (
+                <div style={{ marginTop: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowOverride(v => !v)}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: 'var(--text-muted)', fontSize: '0.8rem', padding: 0,
+                    }}
+                  >
+                    🔑 Admin override {showOverride ? '▲' : '▼'}
+                  </button>
+                  {showOverride && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                      <input
+                        type="password"
+                        placeholder="Admin code"
+                        value={adminCode}
+                        onChange={e => setAdminCode(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleForceJoin()}
+                        style={{ flex: 1 }}
+                        autoComplete="off"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        style={{ padding: '6px 14px', whiteSpace: 'nowrap' }}
+                        disabled={!adminCode.trim() || !name.trim()}
+                        onClick={handleForceJoin}
+                      >
+                        Force join
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           <form onSubmit={handleJoin}>
             <div style={{ marginBottom: 16 }}>
               <label>Your name</label>
