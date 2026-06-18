@@ -40,6 +40,7 @@ export interface SessionState {
   CurrentRound: CurrentRound | null
   CurrentPickerId: string | null
   PickOrder: string[]
+  IsLocalized?: boolean
 }
 
 // ── SignalR event payloads ─────────────────────────────────────────────────
@@ -102,6 +103,7 @@ export interface SongEntry {
   AnimeVintage: string
   SongType: string
   VideoUrl: string
+  LocalVideoUrl?: string   // set after "Make quiz local" download
   SongLength: number  // seconds
   StartMin: number    // 0–100 %
   StartMax: number    // 0–100 %
@@ -126,6 +128,7 @@ export interface Game {
   Name: string
   Settings: GameSettings
   Cards: Card[]
+  IsLocalized?: boolean
   CreatedAt: string
   UpdatedAt: string
 }

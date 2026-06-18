@@ -1,22 +1,16 @@
 using Microsoft.AspNetCore.SignalR;
-using MongoDB.Driver;
 using SpeedTune.Api.Hubs;
 using SpeedTune.Api.Models;
 
 namespace SpeedTune.Api.Services;
 
-public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
+public class GameEngineService(ISpeedTuneDb db, IHubContext<GameHub> hub)
 {
     // ── helpers ────────────────────────────────────────────────────────────
 
-    private async Task<Session?> GetActiveSession() =>
-        await db.Sessions
-            .Find(s => s.Status == "lobby" || s.Status == "active")
-            .SortByDescending(s => s.CreatedAt)
-            .FirstOrDefaultAsync();
+    private Task<Session?> GetActiveSession() => db.GetActiveSessionAsync();
 
-    private async Task<Game?> GetGame(string gameId) =>
-        await db.Games.Find(g => g.Id == gameId).FirstOrDefaultAsync();
+    private Task<Game?> GetGame(string gameId) => db.GetGameAsync(gameId);
 
     private static object BuildPlayerDto(Player p) =>
         new { p.SocketId, p.Name, p.Color, p.Score };
@@ -81,7 +75,7 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
                 session.PickOrder.Add(socketId);
         }
 
-        await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
+        await db.ReplaceSessionAsync(session);
 
         // Tell everyone the old socket is gone before announcing the new one
         if (oldSocketId is not null)
@@ -102,6 +96,40 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         await hub.Clients.All.SendAsync("LobbyPlayerJoined", new { Player = BuildPlayerDto(rejoined) });
     }
 
+    // ── offline player setup ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Replaces any existing offline-* virtual players in the lobby with a fresh set.
+    /// Each input specifies the hardware key, display name, and color for the player.
+    /// Only valid in lobby status.
+    /// </summary>
+    public async Task AddOfflinePlayers(List<OfflinePlayerInput> inputs)
+    {
+        var session = await GetActiveSession();
+        if (session is null || session.Status != "lobby") return;
+
+        // Remove existing offline players and notify everyone
+        var existing = session.Players.Where(p => p.SocketId.StartsWith("offline-")).ToList();
+        foreach (var p in existing)
+        {
+            session.Players.Remove(p);
+            await hub.Clients.All.SendAsync("LobbyPlayerLeft", new { PlayerId = p.SocketId });
+        }
+
+        // Add new offline players
+        foreach (var input in inputs)
+        {
+            var socketId = $"offline-{input.Key.ToUpperInvariant()}";
+            session.Players.Add(new Player { SocketId = socketId, Name = input.Name, Color = input.Color });
+        }
+
+        await db.ReplaceSessionAsync(session);
+
+        // Announce new players
+        foreach (var p in session.Players.Where(p => p.SocketId.StartsWith("offline-")))
+            await hub.Clients.All.SendAsync("LobbyPlayerJoined", new { Player = BuildPlayerDto(p) });
+    }
+
     // ── start game ─────────────────────────────────────────────────────────
 
     public async Task StartGame()
@@ -112,7 +140,7 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         session.Status = "active";
         session.PickOrder = session.Players.OrderBy(_ => Random.Shared.Next()).Select(p => p.SocketId).ToList();
         session.CurrentPickerIndex = 0;
-        await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
+        await db.ReplaceSessionAsync(session);
         await hub.Clients.All.SendAsync("GameStarted");
         await hub.Clients.All.SendAsync("PickerUpdate", BuildPickerDto(session));
     }
@@ -143,16 +171,18 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
             Phase = "guess",
             ExhaustedBuzzers = new()
         };
-        await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
+        await db.ReplaceSessionAsync(session);
 
         var song = card.Songs[songIndex];
         var startPct = CalcStartPercent(song);
+
+        var videoUrl = song.LocalVideoUrl ?? song.VideoUrl;
 
         // Display gets video URL + start position; others get start position only
         await hub.Clients.Group("display").SendAsync("RoundSongStart", new
         {
             CardId = cardId, CardLabel = card.Label, Stars = card.Stars,
-            SongIndex = songIndex, TotalSongs = card.Songs.Count, VideoUrl = song.VideoUrl,
+            SongIndex = songIndex, TotalSongs = card.Songs.Count, VideoUrl = videoUrl,
             ClipDuration = game.Settings.ClipDuration, StartPercent = startPct
         });
         await hub.Clients.Group("players").SendAsync("RoundSongStart", new
@@ -184,7 +214,7 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         if (session.CurrentRound.IsTimedOut) return;
 
         session.CurrentRound.IsTimedOut = true;
-        await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
+        await db.ReplaceSessionAsync(session);
         await hub.Clients.All.SendAsync("RoundTimedOut");
     }
 
@@ -200,7 +230,7 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
 
         session.CurrentRound.Phase = "buzzed";
         session.CurrentRound.BuzzedPlayerId = socketId;
-        await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
+        await db.ReplaceSessionAsync(session);
 
         var game = await GetGame(session.GameId);
         await hub.Clients.All.SendAsync("RoundBuzz", new
@@ -233,7 +263,7 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
                 ? pointValue * 2
                 : pointValue;
             if (winner is not null) winner.Score += effectivePoints;
-            await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
+            await db.ReplaceSessionAsync(session);
             await RevealAndAdvance(session, game, card, song, effectivePoints, round.BuzzedPlayerId);
         }
         else
@@ -249,7 +279,7 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
             bool allExhausted = session.Players.All(p => round.ExhaustedBuzzers.Contains(p.SocketId));
             if (allExhausted) round.IsTimedOut = true;
 
-            await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
+            await db.ReplaceSessionAsync(session);
 
             await hub.Clients.All.SendAsync("ScoresUpdate", BuildScores(session.Players));
             await hub.Clients.All.SendAsync("RoundAudioResume");
@@ -284,7 +314,7 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         if (player is null) return;
 
         player.BannedUntil = DateTime.UtcNow.AddSeconds(30);
-        await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
+        await db.ReplaceSessionAsync(session);
 
         await hub.Clients.Client(playerId).SendAsync("LobbyPlayerKicked");
         await hub.Clients.All.SendAsync("LobbyPlayerLeft", new { PlayerId = playerId });
@@ -299,7 +329,7 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         var idx = session.PickOrder.IndexOf(playerId);
         if (idx == -1) return;
         session.CurrentPickerIndex = idx;
-        await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
+        await db.ReplaceSessionAsync(session);
         await hub.Clients.All.SendAsync("PickerUpdate", BuildPickerDto(session));
     }
 
@@ -314,7 +344,7 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         if (player is null) return;
 
         player.Score = score;
-        await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
+        await db.ReplaceSessionAsync(session);
         await hub.Clients.All.SendAsync("ScoresUpdate", BuildScores(session.Players));
     }
 
@@ -327,7 +357,7 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
 
         session.Status = "ended";
         session.CurrentRound = null;
-        await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
+        await db.ReplaceSessionAsync(session);
 
         await hub.Clients.All.SendAsync("GameEnded", new
         {
@@ -346,7 +376,7 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         if (player is null || player.BannedUntil > DateTime.UtcNow) return;
 
         session.Players.Remove(player);
-        await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
+        await db.ReplaceSessionAsync(session);
         await hub.Clients.All.SendAsync("LobbyPlayerLeft", new { PlayerId = socketId });
     }
 
@@ -357,13 +387,13 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
         var round = session.CurrentRound!;
         round.Phase = "reveal";
         session.PlayedSongs.Add(new PlayedSong { CardId = round.CardId, SongIndex = round.SongIndex });
-        await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
+        await db.ReplaceSessionAsync(session);
 
         await hub.Clients.All.SendAsync("RoundAnswerReveal", new
         {
             song.AnimeName, song.SongName, song.SongArtist,
             PointsAwarded = points, WinnerId = winnerId,
-            VideoUrl = song.VideoUrl
+            VideoUrl = song.LocalVideoUrl ?? song.VideoUrl
         });
         await hub.Clients.All.SendAsync("ScoresUpdate", BuildScores(session.Players));
         await hub.Clients.All.SendAsync("CardsUpdate", new { Cards = BuildCardSummaries(session, game) });
@@ -399,14 +429,15 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
                 Phase = "guess",
                 ExhaustedBuzzers = new()
             };
-            await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
+            await db.ReplaceSessionAsync(session);
 
             var nextSong = card.Songs[nextIndex.Value];
             var nextStartPct = CalcStartPercent(nextSong);
+            var nextVideoUrl = nextSong.LocalVideoUrl ?? nextSong.VideoUrl;
             await hub.Clients.Group("display").SendAsync("RoundSongStart", new
             {
                 CardId = round.CardId, CardLabel = card.Label, Stars = card.Stars,
-                SongIndex = nextIndex.Value, TotalSongs = card.Songs.Count, VideoUrl = nextSong.VideoUrl,
+                SongIndex = nextIndex.Value, TotalSongs = card.Songs.Count, VideoUrl = nextVideoUrl,
                 ClipDuration = game!.Settings.ClipDuration, StartPercent = nextStartPct
             });
             await hub.Clients.Group("players").SendAsync("RoundSongStart", new
@@ -431,7 +462,7 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
             session.CurrentRound = null;
             if (session.PickOrder.Count > 0)
                 session.CurrentPickerIndex = (session.CurrentPickerIndex + 1) % session.PickOrder.Count;
-            await db.Sessions.ReplaceOneAsync(s => s.Id == session.Id, session);
+            await db.ReplaceSessionAsync(session);
             await hub.Clients.All.SendAsync("RoundCardComplete");
             await hub.Clients.All.SendAsync("PickerUpdate", BuildPickerDto(session));
         }
@@ -501,6 +532,7 @@ public class GameEngineService(MongoDbService db, IHubContext<GameHub> hub)
             CurrentRound = currentRound,
             CurrentPickerId = session.CurrentPickerId,
             PickOrder = session.PickOrder,
+            IsLocalized = game.IsLocalized,
         };
     }
 }

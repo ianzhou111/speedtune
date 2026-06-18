@@ -1,0 +1,171 @@
+[
+  {
+    "Id": "6a2c6e78c82345e8f00c8176",
+    "GameId": "6a13ec925a05367fcbb4de9d",
+    "Status": "ended",
+    "Players": [
+      {
+        "SocketId": "offline-T",
+        "Name": "Player 1",
+        "Color": "red",
+        "Score": 0
+      },
+      {
+        "SocketId": "offline-Y",
+        "Name": "Player 2",
+        "Color": "blue",
+        "Score": 0
+      },
+      {
+        "SocketId": "offline-U",
+        "Name": "Player 3",
+        "Color": "green",
+        "Score": 0
+      },
+      {
+        "SocketId": "offline-I",
+        "Name": "Player 4",
+        "Color": "yellow",
+        "Score": 0
+      },
+      {
+        "SocketId": "offline-O",
+        "Name": "Player 5",
+        "Color": "purple",
+        "Score": 0
+      },
+      {
+        "SocketId": "offline-P",
+        "Name": "Player 6",
+        "Color": "orange",
+        "Score": 0
+      }
+    ],
+    "PlayedSongs": [
+      {
+        "CardId": "fb8131ba-5b9f-4348-bd83-b0c2fd515a88",
+        "SongIndex": 0
+      },
+      {
+        "CardId": "fb8131ba-5b9f-4348-bd83-b0c2fd515a88",
+        "SongIndex": 1
+      },
+      {
+        "CardId": "fb8131ba-5b9f-4348-bd83-b0c2fd515a88",
+        "SongIndex": 2
+      },
+      {
+        "CardId": "fb8131ba-5b9f-4348-bd83-b0c2fd515a88",
+        "SongIndex": 3
+      },
+      {
+        "CardId": "fb8131ba-5b9f-4348-bd83-b0c2fd515a88",
+        "SongIndex": 4
+      },
+      {
+        "CardId": "b0c68f3d-9183-4945-90f5-0184a4d6ae48",
+        "SongIndex": 0
+      }
+    ],
+    "PickOrder": [
+      "offline-P",
+      "offline-Y",
+      "offline-O",
+      "offline-I",
+      "offline-T",
+      "offline-U"
+    ],
+    "CurrentPickerIndex": 1,
+    "CreatedAt": "2026-06-12T20:39:20.3891609Z",
+    "UpdatedAt": "2026-06-12T20:39:20.3891778Z",
+    "CurrentPickerId": "offline-Y"
+  },
+  {
+    "Id": "6a2c81ca686908996f26cd74",
+    "GameId": "6a13ec925a05367fcbb4de9d",
+    "Status": "active",
+    "Players": [
+      {
+        "SocketId": "offline-T",
+        "Name": "Player 1",
+        "Color": "red",
+        "Score": 0
+      },
+      {
+        "SocketId": "offline-Y",
+        "Name": "Player 2",
+        "Color": "blue",
+        "Score": 0
+      },
+      {
+        "SocketId": "offline-U",
+        "Name": "Player 3",
+        "Color": "green",
+        "Score": 600
+      },
+      {
+        "SocketId": "offline-I",
+        "Name": "Player 4",
+        "Color": "yellow",
+        "Score": 0
+      },
+      {
+        "SocketId": "offline-O",
+        "Name": "Player 5",
+        "Color": "purple",
+        "Score": 600
+      },
+      {
+        "SocketId": "offline-P",
+        "Name": "Player 6",
+        "Color": "orange",
+        "Score": 200
+      }
+    ],
+    "PlayedSongs": [
+      {
+        "CardId": "666b923a-01ee-4620-8f47-01b8c70c23b8",
+        "SongIndex": 0
+      },
+      {
+        "CardId": "666b923a-01ee-4620-8f47-01b8c70c23b8",
+        "SongIndex": 1
+      },
+      {
+        "CardId": "666b923a-01ee-4620-8f47-01b8c70c23b8",
+        "SongIndex": 2
+      },
+      {
+        "CardId": "666b923a-01ee-4620-8f47-01b8c70c23b8",
+        "SongIndex": 3
+      },
+      {
+        "CardId": "666b923a-01ee-4620-8f47-01b8c70c23b8",
+        "SongIndex": 4
+      },
+      {
+        "CardId": "6cca7231-f2ef-4e4f-be0f-bbb80154e2e1",
+        "SongIndex": 0
+      }
+    ],
+    "CurrentRound": {
+      "CardId": "6cca7231-f2ef-4e4f-be0f-bbb80154e2e1",
+      "SongIndex": 1,
+      "Phase": "guess",
+      "ExhaustedBuzzers": [],
+      "IsTimedOut": true
+    },
+    "PickOrder": [
+      "offline-I",
+      "offline-U",
+      "offline-P",
+      "offline-Y",
+      "offline-T",
+      "offline-O"
+    ],
+    "CurrentPickerIndex": 1,
+    "CreatedAt": "2026-06-12T22:01:46.5206856Z",
+    "UpdatedAt": "2026-06-12T22:01:46.5206856Z",
+    "CurrentPickerId": "offline-U"
+  }
+]

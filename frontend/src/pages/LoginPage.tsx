@@ -26,7 +26,7 @@ export default function LoginPage() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div className="card" style={{ width: 360 }}>
-        <h2 style={{ textAlign: 'center', marginBottom: 24, color: 'var(--text)' }}>SpeedTune Admin</h2>
+        <h2 style={{ textAlign: 'center', marginBottom: 24, color: 'var(--text)' }}>Anisong Trivia Admin</h2>
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: 16 }}>
             <label>Username</label>

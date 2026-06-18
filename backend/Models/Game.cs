@@ -13,6 +13,8 @@ public class SongEntry
     public string AnimeVintage { get; set; } = "";
     public string SongType { get; set; } = "";
     public string VideoUrl { get; set; } = "";
+    /// <summary>Local cached path served by the backend (e.g. /media-cache/abc123.mp4). Null if not cached.</summary>
+    public string? LocalVideoUrl { get; set; }
     /// <summary>Song duration in seconds (from AnisongDB), used to calculate playback range.</summary>
     public float SongLength { get; set; } = 0;
     /// <summary>Minimum playback start point as a percentage 0–100.</summary>
@@ -50,6 +52,8 @@ public class Game
     public string Name { get; set; } = "";
     public GameSettings Settings { get; set; } = new();
     public List<Card> Cards { get; set; } = new();
+    /// <summary>True when all songs have been downloaded and cached locally for offline play.</summary>
+    public bool IsLocalized { get; set; } = false;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

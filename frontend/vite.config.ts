@@ -15,6 +15,10 @@ export default defineConfig({
         changeOrigin: true,
         ws: true,
       },
+      '/media-cache': {
+        target: 'http://localhost:5090',
+        changeOrigin: true,
+      },
     },
   },
 })

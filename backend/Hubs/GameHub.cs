@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.SignalR;
-using MongoDB.Driver;
 using SpeedTune.Api.Models;
 using SpeedTune.Api.Services;
 
 namespace SpeedTune.Api.Hubs;
 
-public class GameHub(GameEngineService engine, MongoDbService db, IConfiguration config) : Hub
+/// <summary>Describes one offline (hardware-key) player sent from the host setup panel.</summary>
+public record OfflinePlayerInput(string Key, string Name, string Color);
+
+public class GameHub(GameEngineService engine, ISpeedTuneDb db, IConfiguration config) : Hub
 {
     // ── helpers ────────────────────────────────────────────────────────────
 
@@ -140,6 +142,27 @@ public class GameHub(GameEngineService engine, MongoDbService db, IConfiguration
         await engine.SetPicker(playerId);
     }
 
+    /// <summary>
+    /// Host-side buzzer for offline (keyboard) players.
+    /// Triggers a buzz on behalf of the virtual player with the given SocketId.
+    /// </summary>
+    public async Task HostBuzzForPlayer(string playerId)
+    {
+        if (!IsHost()) return;
+        await engine.Buzz(playerId);
+    }
+
+    /// <summary>
+    /// Sets up the six virtual offline players for this session.
+    /// Replaces any previously configured offline players.
+    /// Only valid while in lobby status.
+    /// </summary>
+    public async Task HostAddOfflinePlayers(OfflinePlayerInput[] players)
+    {
+        if (!IsHost()) return;
+        await engine.AddOfflinePlayers(players.ToList());
+    }
+
     // ── player buzzer ───────────────────────────────────────────────────────
 
     public async Task PlayerBuzz() => await engine.Buzz(Context.ConnectionId);
@@ -158,15 +181,8 @@ public class GameHub(GameEngineService engine, MongoDbService db, IConfiguration
 
     private async Task SendCallerState()
     {
-        var session = await db.Sessions
-            .Find(s => s.Status == "lobby" || s.Status == "active")
-            .SortByDescending(s => s.CreatedAt)
-            .FirstOrDefaultAsync();
-
-        Game? game = null;
-        if (session?.GameId is not null)
-            game = await db.Games.Find(g => g.Id == session.GameId).FirstOrDefaultAsync();
-
+        var session = await db.GetActiveSessionAsync();
+        var game    = session is not null ? await db.GetGameAsync(session.GameId) : null;
         await Clients.Caller.SendAsync("SessionState", GameEngineService.BuildPublicState(session, game));
     }
 }

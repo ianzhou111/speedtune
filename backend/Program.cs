@@ -15,8 +15,22 @@ var jwtKey = builder.Configuration["Jwt:Key"]
 
 // ── Services ────────────────────────────────────────────────────────────────
 
-builder.Services.AddSingleton<MongoDbService>();
+// Storage backend — always register local; also register Mongo if URI is configured.
+// RoutingSpeedTuneDb delegates to whichever is currently active (switchable at runtime).
+builder.Services.AddSingleton<StorageModeService>();
+builder.Services.AddSingleton<LocalSpeedTuneDb>();
+
+var mongoUri = builder.Configuration["MongoDB:Uri"];
+if (!string.IsNullOrWhiteSpace(mongoUri))
+{
+    builder.Services.AddSingleton<MongoDbService>();
+    builder.Services.AddSingleton<MongoSpeedTuneDb>();
+}
+
+builder.Services.AddSingleton<ISpeedTuneDb, RoutingSpeedTuneDb>();
+
 builder.Services.AddSingleton<GameEngineService>();
+builder.Services.AddSingleton<OfflineMediaService>();
 
 builder.Services.AddHttpClient();
 

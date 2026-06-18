@@ -97,7 +97,7 @@ export default function SoloPage() {
     if (!ms) return
     ms.metadata = new MediaMetadata({
       title:  `Song ${idx + 1} / ${total}`,
-      artist: 'SpeedTune Solo',
+      artist: 'Anisong Trivia Solo',
       album:  gp === 'reveal' ? animeName : '—',
     })
     if (gp === 'playing') {
@@ -328,7 +328,7 @@ export default function SoloPage() {
     return (
       <div className="page" style={{ maxWidth: 480, margin: '0 auto' }}>
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontSize: '1.75rem', marginBottom: 4 }}>🎵 SpeedTune Solo</h1>
+          <h1 style={{ fontSize: '1.75rem', marginBottom: 4 }}>🎵 Anisong Trivia Solo</h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
             Anime music quiz — hands-free, CarPlay-ready
           </p>

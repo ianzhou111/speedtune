@@ -42,6 +42,10 @@ backend/appsettings.*.json
 backend/bin/
 backend/obj/
 
+# Offline media cache — keep the folder, ignore downloaded files
+backend/wwwroot/media-cache/*
+!backend/wwwroot/media-cache/.gitkeep
+
 # vercel
 .vercel
 

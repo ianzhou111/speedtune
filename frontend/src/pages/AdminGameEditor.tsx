@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { gamesApi, searchAnisong, isAuthenticated } from '../lib/api'
+import { gamesApi, searchAnisong, offlineApi, isAuthenticated } from '../lib/api'
 import type { Game, Card, SongEntry } from '../lib/types'
+import type { OfflineCacheStatus } from '../lib/api'
 
 const STARS = [1, 2, 3, 4, 5]
 
@@ -75,6 +76,57 @@ export default function AdminGameEditor() {
   const [filterOpening, setFilterOpening] = useState(true)
   const [filterEnding, setFilterEnding] = useState(true)
   const [filterInsert, setFilterInsert] = useState(true)
+
+  // Offline / local cache state
+  const [offlineStatus, setOfflineStatus] = useState<OfflineCacheStatus | null>(null)
+  const [offlineError, setOfflineError] = useState('')
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  function stopPolling() {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+  }
+
+  async function startLocalize() {
+    if (!game) return
+    setOfflineError('')
+    try {
+      await offlineApi.startCache(game.Id)
+      // Immediately show a running state while we wait for the first poll
+      setOfflineStatus({ Total: 0, Downloaded: 0, Failed: 0, IsRunning: true, IsDone: false })
+      stopPolling()
+      pollRef.current = setInterval(async () => {
+        try {
+          const s = await offlineApi.getStatus(game.Id)
+          setOfflineStatus(s)
+          if (s.IsDone) {
+            stopPolling()
+            // Reload game to get updated LocalVideoUrl on songs
+            const refreshed = await gamesApi.get(game.Id)
+            setGame(refreshed)
+          }
+        } catch { stopPolling() }
+      }, 1000)
+    } catch (err) {
+      setOfflineError(err instanceof Error ? err.message : 'Failed to start download')
+    }
+  }
+
+  async function clearLocalize() {
+    if (!game) return
+    if (!confirm('Delete all locally cached media for this game?')) return
+    try {
+      await offlineApi.deleteCache(game.Id)
+      setOfflineStatus(null)
+      stopPolling()
+      const refreshed = await gamesApi.get(game.Id)
+      setGame(refreshed)
+    } catch (err) {
+      console.error('Failed to clear cache:', err)
+    }
+  }
+
+  // Clean up polling on unmount
+  useEffect(() => () => stopPolling(), [])
 
   // Collapsed cards
   const [collapsedCards, setCollapsedCards] = useState<Set<string>>(new Set())
@@ -292,6 +344,74 @@ export default function AdminGameEditor() {
         </div>
       </div>
 
+      {/* Offline mode */}
+      <div className="card" style={{ marginBottom: 24 }}>
+        <h3 style={{ marginBottom: 12, color: 'var(--text)' }}>Offline Mode</h3>
+
+        {offlineStatus?.IsRunning ? (
+          /* Actively downloading */
+          <div>
+            <div style={{ fontSize: '0.9rem', marginBottom: 8 }}>
+              Downloading media… {offlineStatus.Downloaded} / {offlineStatus.Total}
+              {offlineStatus.Failed > 0 && (
+                <span style={{ color: 'var(--red)', marginLeft: 8 }}>{offlineStatus.Failed} failed</span>
+              )}
+            </div>
+            <div style={{ background: 'var(--surface2)', borderRadius: 6, height: 8, overflow: 'hidden' }}>
+              <div style={{
+                height: '100%',
+                background: 'var(--accent)',
+                width: `${offlineStatus.Total > 0 ? Math.round((offlineStatus.Downloaded / offlineStatus.Total) * 100) : 0}%`,
+                transition: 'width 0.3s ease',
+                borderRadius: 6,
+              }} />
+            </div>
+          </div>
+        ) : offlineStatus?.IsDone && offlineStatus.Failed > 0 ? (
+          /* Finished but with failures */
+          <div>
+            <p style={{ color: 'var(--yellow)', fontSize: '0.9rem', marginBottom: 10 }}>
+              Download completed with {offlineStatus.Failed} failure{offlineStatus.Failed !== 1 ? 's' : ''}.
+              Some songs may not work offline.
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn-secondary" onClick={startLocalize}>Retry</button>
+              <button className="btn-danger" onClick={clearLocalize}>Clear cache</button>
+            </div>
+          </div>
+        ) : game.IsLocalized ? (
+          /* Fully cached */
+          <div>
+            <p style={{ color: 'var(--green)', fontSize: '0.9rem', marginBottom: 10 }}>
+              All media cached locally. This quiz is ready for offline play.
+            </p>
+            <button className="btn-danger" style={{ padding: '6px 14px' }} onClick={clearLocalize}>
+              Clear offline cache
+            </button>
+          </div>
+        ) : (
+          /* Not yet localized */
+          <div>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: 10 }}>
+              Download all song media to play this quiz without internet.
+              {game.Cards.reduce((n, c) => n + c.Songs.length, 0) === 0
+                ? ' Add songs to cards first.'
+                : ` ${game.Cards.reduce((n, c) => n + c.Songs.length, 0)} song${game.Cards.reduce((n, c) => n + c.Songs.length, 0) !== 1 ? 's' : ''} will be downloaded.`}
+            </p>
+            <button
+              className="btn-secondary"
+              onClick={startLocalize}
+              disabled={game.Cards.reduce((n, c) => n + c.Songs.length, 0) === 0}
+            >
+              Make this quiz local
+            </button>
+            {offlineError && (
+              <p style={{ color: 'var(--red)', fontSize: '0.85rem', marginTop: 8 }}>{offlineError}</p>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Song search panel */}
       <div className="card" style={{ marginBottom: 24 }}>
         <h3 style={{ marginBottom: 12, color: 'var(--text)' }}>Search Songs (AnisongDB)</h3>
@@ -498,6 +618,12 @@ export default function AdminGameEditor() {
                       <div style={{ fontWeight: 500 }}>{song.SongName} — {song.SongArtist}</div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{song.AnimeName} · {song.SongType}</div>
                     </div>
+                    {song.LocalVideoUrl && (
+                      <span
+                        title="Cached locally for offline play"
+                        style={{ fontSize: '0.65rem', background: 'var(--green)', color: '#fff', borderRadius: 4, padding: '1px 5px', fontWeight: 700, flexShrink: 0 }}
+                      >offline</span>
+                    )}
                     <button
                       style={{ background: 'none', color: 'var(--text-muted)', padding: '2px 6px', flexShrink: 0 }}
                       onClick={() => removeSong(card.Id, idx)}

@@ -46,6 +46,10 @@ export default function DisplayPage() {
   const buzzTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const roundPhaseRef = useRef<'idle' | 'guess' | 'buzzed' | 'reveal'>('idle')
 
+  // ── Web Audio normalization refs ─────────────────────────────────────────
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const normRafRef  = useRef<number | null>(null)
+
   function applyVolume(v: number) {
     setVolume(v)
     if (videoRef.current) videoRef.current.volume = v
@@ -119,6 +123,91 @@ export default function DisplayPage() {
 
   function unlockAudio() {
     setAudioUnlocked(true)
+    // Create AudioContext on user gesture so it starts in running state.
+    // Used only for measurement — native audio is never re-routed through it.
+    if (!audioCtxRef.current) {
+      try { audioCtxRef.current = new AudioContext() } catch { /* Web Audio unavailable */ }
+    }
+  }
+
+  /**
+   * Measure the loudness of the clip for ~1 s using captureStream() and adjust
+   * vid.volume so every clip lands at roughly the same perceived level.
+   *
+   * captureStream() taps the audio WITHOUT taking exclusive control, so native
+   * playback is completely unaffected — the video always plays through its own
+   * default audio path regardless of AudioContext state.
+   */
+  function startNormalization(vid: HTMLVideoElement) {
+    // Cancel any previous measurement
+    if (normRafRef.current) { cancelAnimationFrame(normRafRef.current); normRafRef.current = null }
+
+    const ctx = audioCtxRef.current
+    if (!ctx) return
+
+    try {
+      // captureStream is prefixed in some browsers; gracefully skip if absent
+      type CaptureEl = HTMLVideoElement & { captureStream?(): MediaStream; mozCaptureStream?(): MediaStream }
+      const stream = (vid as CaptureEl).captureStream?.() ?? (vid as CaptureEl).mozCaptureStream?.()
+      if (!stream) return
+
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {})
+
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 2048
+      analyser.smoothingTimeConstant = 0.0  // no smoothing — we want raw RMS
+
+      // Sink with gain=0: needed so the AudioContext actually processes frames,
+      // but no extra audio comes out of the context.
+      const sink = ctx.createGain()
+      sink.gain.value = 0
+      analyser.connect(sink)
+      sink.connect(ctx.destination)
+
+      const source = ctx.createMediaStreamSource(stream)
+      source.connect(analyser)
+
+      const bufLen = analyser.frequencyBinCount
+      const buf    = new Float32Array(bufLen)
+      let sumSq = 0, sampleCount = 0
+      const TARGET_RMS = 0.15   // ≈ −16 dBFS
+      const MEASURE_MS = 1000
+      const baseVol    = vid.volume  // user's chosen volume at clip start
+      const t0         = performance.now()
+      let done         = false
+
+      function cleanup() {
+        try { source.disconnect(); analyser.disconnect(); sink.disconnect() } catch { /* already disconnected */ }
+      }
+
+      function tick() {
+        if (done) return
+        analyser.getFloatTimeDomainData(buf)
+        for (let i = 0; i < bufLen; i++) { sumSq += buf[i] * buf[i]; sampleCount++ }
+
+        if (performance.now() - t0 < MEASURE_MS) {
+          normRafRef.current = requestAnimationFrame(tick)
+        } else {
+          done = true
+          normRafRef.current = null
+          cleanup()
+
+          if (sampleCount > 0) {
+            const rms = Math.sqrt(sumSq / sampleCount)
+            if (rms > 0.002) {
+              // Captured signal already has baseVol baked in → correct for it
+              // so we're normalising the source level, not the already-scaled level
+              const factor = Math.min(Math.max(TARGET_RMS * baseVol / rms, baseVol * 0.2), 1.0)
+              if (videoRef.current === vid) videoRef.current.volume = factor
+            }
+          }
+        }
+      }
+
+      normRafRef.current = requestAnimationFrame(tick)
+    } catch {
+      // captureStream or AudioContext unavailable — normalization skipped, audio unaffected
+    }
   }
 
   useEffect(() => {
@@ -182,8 +271,8 @@ export default function DisplayPage() {
             // Only play if still in guess phase — buzz may have arrived before load finished
             if (roundPhaseRef.current === 'guess') {
               vid.play()
-                .then(() => { vid.muted = false })
-                .catch(() => {})
+                .then(() => { vid.muted = false; startNormalization(vid) })
+                .catch(() => { vid.muted = false })
             }
           }, { once: true })
           vid.load()
@@ -208,7 +297,9 @@ export default function DisplayPage() {
         const vid = videoRef.current
         if (vid) {
           vid.muted = true
-          vid.play().then(() => { vid.muted = false }).catch(() => {})
+          vid.play()
+            .then(() => { vid.muted = false })
+            .catch(() => { vid.muted = false })
         }
         resumeTimer() // continue counting down from where it paused
       })
@@ -233,7 +324,9 @@ export default function DisplayPage() {
               if (pct > 0 && isFinite(vid.duration)) {
                 vid.currentTime = (pct / 100) * vid.duration
               }
-              vid.play().then(() => { vid.muted = false }).catch(() => {})
+              vid.play()
+                .then(() => { vid.muted = false; startNormalization(vid) })
+                .catch(() => { vid.muted = false })
             }, { once: true })
             vid.load()
           } else {
@@ -242,7 +335,9 @@ export default function DisplayPage() {
             if (pct > 0 && isFinite(vid.duration)) {
               vid.currentTime = (pct / 100) * vid.duration
             }
-            vid.play().then(() => { vid.muted = false }).catch(() => {})
+            vid.play()
+              .then(() => { vid.muted = false; startNormalization(vid) })
+              .catch(() => { vid.muted = false })
           }
         }
       })
@@ -290,6 +385,8 @@ export default function DisplayPage() {
       active = false
       clearTimer()
       clearBuzzTimer()
+      if (normRafRef.current) { cancelAnimationFrame(normRafRef.current); normRafRef.current = null }
+      audioCtxRef.current?.close().catch(() => {})
       const EVENTS = ['SessionState','LobbyPlayerJoined','LobbyPlayerLeft','GameStarted',
         'RoundSongStart','RoundBuzz','RoundAudioPause','RoundAudioPlay','RoundAudioResume','RoundAnswerReveal',
         'RoundCardComplete','ScoresUpdate','CardsUpdate','GameEnded','PickerUpdate','RoundTimedOut']
@@ -324,7 +421,7 @@ export default function DisplayPage() {
       >
         <video ref={videoRef} style={{ display: 'none' }} />
         <div style={{ fontSize: '4rem', marginBottom: 16 }}>🔊</div>
-        <h1 style={{ fontSize: '2.5rem', marginBottom: 12 }}>SpeedTune</h1>
+        <h1 style={{ fontSize: '2.5rem', marginBottom: 12 }}>Anisong Trivia</h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '1.2rem' }}>
           Click anywhere to enable audio
         </p>
@@ -357,7 +454,7 @@ export default function DisplayPage() {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
         <video ref={videoRef} style={{ display: 'none' }} />
-        <h1 style={{ fontSize: '3rem', marginBottom: 8 }}>SpeedTune</h1>
+        <h1 style={{ fontSize: '3rem', marginBottom: 8 }}>Anisong Trivia</h1>
         <p style={{ color: 'var(--text-muted)', marginBottom: 40, fontSize: '1.2rem' }}>Waiting for players…</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, justifyContent: 'center', maxWidth: 700 }}>
           {players.map(p => (
@@ -485,7 +582,7 @@ export default function DisplayPage() {
               <div>
                 <div style={{ fontSize: '2rem', fontWeight: 800 }}>{reveal.SongName}</div>
                 <div style={{ fontSize: '1.1rem', color: 'var(--text-muted)' }}>{reveal.SongArtist}</div>
-                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--accent-light)' }}>{reveal.AnimeName}</div>
+                <div style={{ fontSize: '2.4rem', fontWeight: 800, color: 'var(--accent-light)' }}>{reveal.AnimeName}</div>
                 {reveal.PointsAwarded > 0 && reveal.WinnerId && (
                   <div style={{ color: 'var(--green)', fontWeight: 700, marginTop: 8, fontSize: '1.1rem' }}>
                     +{reveal.PointsAwarded}{reveal.WinnerId === currentPickerId ? ' 🌟×2' : ''} → {players.find(p => p.SocketId === reveal.WinnerId)?.Name}

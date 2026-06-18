@@ -48,6 +48,15 @@ export default function HostPage() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const roundPhaseRef = useRef<'idle' | 'guess' | 'buzzed' | 'reveal'>('idle')
 
+  // Offline mode
+  const OFFLINE_KEYS = ['T', 'Y', 'U', 'I', 'O', 'P'] as const
+  const DEFAULT_OFFLINE_COLORS = ['red', 'blue', 'green', 'yellow', 'purple', 'orange']
+  const [isLocalized, setIsLocalized] = useState(false)
+  const [offlinePlayers, setOfflinePlayers] = useState(
+    OFFLINE_KEYS.map((key, i) => ({ key: key as string, name: `Player ${i + 1}`, color: DEFAULT_OFFLINE_COLORS[i] }))
+  )
+  const [addingOffline, setAddingOffline] = useState(false)
+
   function commitScore(playerId: string, raw: string) {
     const n = parseInt(raw, 10)
     if (!isNaN(n)) invoke('HostSetScore', playerId, n)
@@ -119,6 +128,7 @@ export default function HostPage() {
       setCards(state.Cards ?? [])
       setCurrentPickerId(state.CurrentPickerId ?? null)
       setPickOrder(state.PickOrder ?? [])
+      setIsLocalized(state.IsLocalized ?? false)
       if (state.Status === 'active') {
         setStatus('active')
         if (state.CurrentRound) {
@@ -222,6 +232,24 @@ export default function HostPage() {
   const invoke = (method: string, ...args: unknown[]) =>
     connRef.current?.invoke(method, ...args).catch(console.error)
 
+  // ── Offline keyboard buzz (T/Y/U/I/O/P) ────────────────────────────────
+  useEffect(() => {
+    if (status !== 'active') return
+    function handleKey(e: KeyboardEvent) {
+      // Don't fire when typing in a form field
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      const key = e.key.toUpperCase()
+      if (!['T', 'Y', 'U', 'I', 'O', 'P'].includes(key)) return
+      if (roundPhaseRef.current !== 'guess') return
+      const playerId = `offline-${key}`
+      if (players.some(p => p.SocketId === playerId)) {
+        invoke('HostBuzzForPlayer', playerId)
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [status, players])
+
   const currentCard = cards.find(c => c.Id === currentCardId)
 
   // ── No session ──────────────────────────────────────────────────────────
@@ -297,7 +325,7 @@ export default function HostPage() {
         background: 'var(--surface)', flexShrink: 0,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontWeight: 700, fontSize: '1rem' }}>SpeedTune Host</span>
+          <span style={{ fontWeight: 700, fontSize: '1rem' }}>Anisong Trivia Host</span>
           <span style={{
             fontSize: '0.75rem', fontWeight: 600, padding: '3px 10px', borderRadius: 20,
             background: status === 'lobby' ? 'var(--surface2)' : 'var(--accent)',
@@ -580,7 +608,7 @@ export default function HostPage() {
             </div>
           )}
 
-          {status === 'lobby' && (
+          {status === 'lobby' && !isLocalized && (
             <div style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               flex: 1, gap: 12, color: 'var(--text-muted)',
@@ -593,6 +621,70 @@ export default function HostPage() {
               <div style={{ fontSize: '0.85rem' }}>
                 Start the game once everyone has joined.
               </div>
+            </div>
+          )}
+
+          {status === 'lobby' && isLocalized && (
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.95rem', marginBottom: 16, color: 'var(--text)' }}>
+                Offline Player Setup
+              </div>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 16 }}>
+                Assign a name and color to each hardware key. Press
+                {' '}<strong style={{ color: 'var(--text)' }}>T Y U I O P</strong> to buzz during the game.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                {offlinePlayers.map((p, i) => (
+                  <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{
+                      fontWeight: 800, fontSize: '1rem', width: 28, height: 28,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: 'var(--surface2)', borderRadius: 6,
+                      color: 'var(--text-muted)', flexShrink: 0,
+                    }}>{p.key}</span>
+                    <input
+                      value={p.name}
+                      onChange={e => setOfflinePlayers(prev =>
+                        prev.map((x, j) => j === i ? { ...x, name: e.target.value } : x)
+                      )}
+                      placeholder={`Player ${i + 1}`}
+                      style={{ flex: 1, minWidth: 0 }}
+                    />
+                    <select
+                      value={p.color}
+                      onChange={e => setOfflinePlayers(prev =>
+                        prev.map((x, j) => j === i ? { ...x, color: e.target.value } : x)
+                      )}
+                      style={{ width: 100 }}
+                    >
+                      {Object.keys(PLAYER_COLORS).map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                    <div style={{
+                      width: 18, height: 18, borderRadius: '50%',
+                      background: PLAYER_COLORS[p.color], flexShrink: 0,
+                    }} />
+                  </div>
+                ))}
+              </div>
+              <button
+                className="btn-primary"
+                style={{ width: '100%' }}
+                disabled={addingOffline || offlinePlayers.some(p => !p.name.trim())}
+                onClick={async () => {
+                  setAddingOffline(true)
+                  try {
+                    await invoke('HostAddOfflinePlayers', offlinePlayers.map(p => ({
+                      Key: p.key, Name: p.name.trim(), Color: p.color,
+                    })))
+                  } finally {
+                    setAddingOffline(false)
+                  }
+                }}
+              >
+                {addingOffline ? 'Adding…' : 'Add offline players'}
+              </button>
             </div>
           )}
         </div>
