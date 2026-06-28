@@ -1,4 +1,4 @@
-import type { Game, GameSettings, Card } from './types'
+import type { Game, GameSettings, Card, SongEntry } from './types'
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 

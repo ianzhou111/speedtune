@@ -4,6 +4,7 @@ using MongoDB.Bson.Serialization.Options;
 
 namespace SpeedTune.Api.Models;
 
+[BsonIgnoreExtraElements]
 public class SongEntry
 {
     public int AnnId { get; set; }
@@ -23,6 +24,7 @@ public class SongEntry
     public int StartMax { get; set; } = 0;
 }
 
+[BsonIgnoreExtraElements]
 public class Card
 {
     // Cards are embedded documents — store Id as a plain string (UUID from frontend is fine)
