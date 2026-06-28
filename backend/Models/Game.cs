@@ -34,6 +34,7 @@ public class Card
     public List<SongEntry> Songs { get; set; } = new();
 }
 
+[BsonIgnoreExtraElements]
 public class GameSettings
 {
     public int ClipDuration { get; set; } = 60;
@@ -46,6 +47,7 @@ public class GameSettings
     };
 }
 
+[BsonIgnoreExtraElements]
 public class Game
 {
     [BsonId]

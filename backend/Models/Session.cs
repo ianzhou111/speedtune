@@ -3,6 +3,7 @@ using MongoDB.Bson.Serialization.Attributes;
 
 namespace SpeedTune.Api.Models;
 
+[BsonIgnoreExtraElements]
 public class Player
 {
     public string SocketId { get; set; } = "";
@@ -12,12 +13,14 @@ public class Player
     public DateTime? BannedUntil { get; set; }
 }
 
+[BsonIgnoreExtraElements]
 public class PlayedSong
 {
     public string CardId { get; set; } = "";
     public int SongIndex { get; set; }
 }
 
+[BsonIgnoreExtraElements]
 public class CurrentRound
 {
     public string CardId { get; set; } = "";
@@ -28,6 +31,7 @@ public class CurrentRound
     public bool IsTimedOut { get; set; }
 }
 
+[BsonIgnoreExtraElements]
 public class Session
 {
     [BsonId]
