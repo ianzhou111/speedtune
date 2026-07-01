@@ -383,7 +383,7 @@ export default function DisplayPage() {
           vid.removeEventListener('error', notify)
           conn.invoke('DisplayPreloadReady').catch(() => {})
         }
-        const timeout = setTimeout(notify, 10_000)
+        const timeout = setTimeout(notify, 1_500)
         const notifyAndClear = () => { clearTimeout(timeout); notify() }
         vid.addEventListener('canplay', notifyAndClear, { once: true })
         vid.addEventListener('error', notifyAndClear, { once: true })
