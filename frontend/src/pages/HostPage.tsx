@@ -45,6 +45,7 @@ export default function HostPage() {
   const [timedOut, setTimedOut] = useState(false)
   const [timeLeft, setTimeLeft] = useState(0)
   const [exhaustedBuzzers, setExhaustedBuzzers] = useState<string[]>([])
+  const [displayPreloadReady, setDisplayPreloadReady] = useState(true)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const roundPhaseRef = useRef<'idle' | 'guess' | 'buzzed' | 'reveal'>('idle')
 
@@ -182,7 +183,9 @@ export default function HostPage() {
     conn.on('RoundAnswerReveal', (p: RoundAnswerRevealPayload) => {
       setReveal(p); roundPhaseRef.current = 'reveal'; setRoundPhase('reveal')
       setAnswerHint(null); setTimedOut(false); setBuzzedPlayer(null); clearTimer()
+      setDisplayPreloadReady(false)
     })
+    conn.on('AllDisplaysReady', () => setDisplayPreloadReady(true))
     conn.on('RoundCardComplete', () => {
       setCurrentCardId(null); roundPhaseRef.current = 'idle'; setRoundPhase('idle')
       setAnswerHint(null); setReveal(null); setBuzzedPlayer(null); setTimedOut(false)
@@ -555,8 +558,13 @@ export default function HostPage() {
                       </div>
                     )}
                   </div>
-                  <button className="btn-primary" style={{ width: '100%' }} onClick={() => invoke('HostNextSong')}>
-                    ▶ Next Song
+                  <button
+                    className="btn-primary"
+                    style={{ width: '100%' }}
+                    disabled={!displayPreloadReady}
+                    onClick={() => invoke('HostNextSong')}
+                  >
+                    {displayPreloadReady ? '▶ Next Song' : '⏳ Buffering…'}
                   </button>
                 </div>
               )}

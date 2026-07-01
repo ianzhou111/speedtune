@@ -50,8 +50,16 @@ public class GameHub(GameEngineService engine, ISpeedTuneDb db, IConfiguration c
     public async Task DisplayJoin()
     {
         await Groups.AddToGroupAsync(Context.ConnectionId, "display");
+        engine.DisplayConnect(Context.ConnectionId);
         await SendCallerState();
     }
+
+    /// <summary>
+    /// Called by a display screen when its preloaded video is ready to play.
+    /// Once all connected displays report ready, host receives AllDisplaysReady.
+    /// </summary>
+    public async Task DisplayPreloadReady() =>
+        await engine.DisplayPreloadReady(Context.ConnectionId);
 
     // ── host ────────────────────────────────────────────────────────────────
 
@@ -174,6 +182,7 @@ public class GameHub(GameEngineService engine, ISpeedTuneDb db, IConfiguration c
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
         await engine.PlayerDisconnect(Context.ConnectionId);
+        await engine.DisplayDisconnect(Context.ConnectionId);
         await base.OnDisconnectedAsync(exception);
     }
 

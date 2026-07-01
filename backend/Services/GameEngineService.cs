@@ -6,6 +6,67 @@ namespace SpeedTune.Api.Services;
 
 public class GameEngineService(ISpeedTuneDb db, IHubContext<GameHub> hub)
 {
+    // ── display preload tracking ───────────────────────────────────────────
+
+    private readonly object          _displayLock              = new();
+    private readonly HashSet<string> _connectedDisplays        = new();
+    private          HashSet<string> _preloadExpectedDisplays  = new();
+    private readonly HashSet<string> _preloadReadyDisplays     = new();
+    private          bool            _preloadInProgress;
+
+    public void DisplayConnect(string connectionId)
+    {
+        lock (_displayLock) _connectedDisplays.Add(connectionId);
+    }
+
+    public async Task DisplayDisconnect(string connectionId)
+    {
+        bool unblock;
+        lock (_displayLock)
+        {
+            _connectedDisplays.Remove(connectionId);
+            _preloadExpectedDisplays.Remove(connectionId);
+            _preloadReadyDisplays.Remove(connectionId);
+            unblock = _preloadInProgress && (
+                _preloadExpectedDisplays.Count == 0 ||
+                _preloadExpectedDisplays.All(id => _preloadReadyDisplays.Contains(id)));
+            if (unblock) _preloadInProgress = false;
+        }
+        if (unblock) await hub.Clients.Group("host").SendAsync("AllDisplaysReady");
+    }
+
+    public async Task DisplayPreloadReady(string connectionId)
+    {
+        bool unblock;
+        lock (_displayLock)
+        {
+            _preloadReadyDisplays.Add(connectionId);
+            unblock = _preloadInProgress &&
+                      _preloadExpectedDisplays.Count > 0 &&
+                      _preloadExpectedDisplays.All(id => _preloadReadyDisplays.Contains(id));
+            if (unblock) _preloadInProgress = false;
+        }
+        if (unblock) await hub.Clients.Group("host").SendAsync("AllDisplaysReady");
+    }
+
+    private async Task StartPreload(string? videoUrl)
+    {
+        HashSet<string> expected;
+        lock (_displayLock)
+        {
+            _preloadReadyDisplays.Clear();
+            expected = _preloadExpectedDisplays = new HashSet<string>(_connectedDisplays);
+            _preloadInProgress = !string.IsNullOrEmpty(videoUrl) && expected.Count > 0;
+        }
+        if (!_preloadInProgress)
+        {
+            // No displays connected or no next song — let host proceed immediately
+            await hub.Clients.Group("host").SendAsync("AllDisplaysReady");
+            return;
+        }
+        await hub.Clients.Group("display").SendAsync("PreloadNext", new { VideoUrl = videoUrl });
+    }
+
     // ── helpers ────────────────────────────────────────────────────────────
 
     private Task<Session?> GetActiveSession() => db.GetActiveSessionAsync();
@@ -397,7 +458,20 @@ public class GameEngineService(ISpeedTuneDb db, IHubContext<GameHub> hub)
         });
         await hub.Clients.All.SendAsync("ScoresUpdate", BuildScores(session.Players));
         await hub.Clients.All.SendAsync("CardsUpdate", new { Cards = BuildCardSummaries(session, game) });
-        // Host clicks "Next Song" to advance — see NextSong() below.
+
+        // Preload the next song on all display screens while host reviews the answer.
+        // AllDisplaysReady is sent to the host once every display confirms the buffer is ready.
+        var playedInThisCard = session.PlayedSongs
+            .Where(p => p.CardId == round.CardId)
+            .Select(p => p.SongIndex)
+            .ToHashSet();
+        var nextIdx = Enumerable.Range(0, card.Songs.Count)
+            .Cast<int?>()
+            .FirstOrDefault(i => !playedInThisCard.Contains(i!.Value));
+        var preloadUrl = nextIdx.HasValue
+            ? (card.Songs[nextIdx.Value].LocalVideoUrl ?? card.Songs[nextIdx.Value].VideoUrl)
+            : null;
+        await StartPreload(preloadUrl);
     }
 
     // ── next song (host-triggered after reveal) ────────────────────────────

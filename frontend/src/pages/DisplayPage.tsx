@@ -13,8 +13,9 @@ interface RevealInfo {
 }
 
 export default function DisplayPage() {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const connRef = useRef<signalR.HubConnection | null>(null)
+  const videoRef    = useRef<HTMLVideoElement>(null)
+  const preloadRef  = useRef<HTMLVideoElement>(null)
+  const connRef     = useRef<signalR.HubConnection | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const startPercentRef = useRef(0)
 
@@ -365,6 +366,30 @@ export default function DisplayPage() {
 
       conn.on('ScoresUpdate', ({ Scores }: ScoresUpdatePayload) => setPlayers(Scores ?? []))
       conn.on('CardsUpdate', ({ Cards }: { Cards: CardSummary[] }) => setCards(Cards ?? []))
+
+      conn.on('PreloadNext', ({ VideoUrl }: { VideoUrl: string }) => {
+        const vid = preloadRef.current
+        if (!vid || !VideoUrl) {
+          conn.invoke('DisplayPreloadReady').catch(() => {})
+          return
+        }
+        // Notify server as soon as the video can start playing (enough buffered).
+        // Also fire on error or after 10 s max so the host is never permanently blocked.
+        let notified = false
+        const notify = () => {
+          if (notified) return
+          notified = true
+          vid.removeEventListener('canplay', notify)
+          vid.removeEventListener('error', notify)
+          conn.invoke('DisplayPreloadReady').catch(() => {})
+        }
+        const timeout = setTimeout(notify, 10_000)
+        const notifyAndClear = () => { clearTimeout(timeout); notify() }
+        vid.addEventListener('canplay', notifyAndClear, { once: true })
+        vid.addEventListener('error', notifyAndClear, { once: true })
+        vid.src = VideoUrl
+        vid.load()
+      })
       conn.on('PickerUpdate', (p: PickerUpdatePayload) => {
         setCurrentPickerId(p.CurrentPickerId)
         setPickOrder(p.PickOrder)
@@ -389,7 +414,7 @@ export default function DisplayPage() {
       audioCtxRef.current?.close().catch(() => {})
       const EVENTS = ['SessionState','LobbyPlayerJoined','LobbyPlayerLeft','GameStarted',
         'RoundSongStart','RoundBuzz','RoundAudioPause','RoundAudioPlay','RoundAudioResume','RoundAnswerReveal',
-        'RoundCardComplete','ScoresUpdate','CardsUpdate','GameEnded','PickerUpdate','RoundTimedOut']
+        'RoundCardComplete','ScoresUpdate','CardsUpdate','GameEnded','PickerUpdate','RoundTimedOut','PreloadNext']
       EVENTS.forEach(e => connRef.current?.off(e))
     }
   }, [])
@@ -470,6 +495,8 @@ export default function DisplayPage() {
   // ── ACTIVE screen ─────────────────────────────────────────────────────────
   return (
     <div style={{ height: '100vh', display: 'flex', background: 'var(--bg)', overflow: 'hidden' }}>
+      {/* Hidden preload buffer — loads the next song while current is playing/revealed */}
+      <video ref={preloadRef} style={{ display: 'none' }} playsInline preload="auto" />
       {/* Left: score board + volume */}
       <div style={{ width: 200, flexShrink: 0, padding: '16px 12px', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden' }}>
         <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>Scores</div>
